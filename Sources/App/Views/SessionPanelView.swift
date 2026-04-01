@@ -3,7 +3,7 @@ import Core
 
 struct SessionPanelView: View {
     let viewModel: SessionPanelViewModel
-    @State private var alwaysOnTop: Bool = false
+    @AppStorage("alwaysOnTop") private var alwaysOnTop: Bool = false
     @State private var staleExpanded: Bool = false
 
     var body: some View {
@@ -31,6 +31,17 @@ struct SessionPanelView: View {
                     .onChange(of: alwaysOnTop) { _, newValue in
                         setWindowLevel(alwaysOnTop: newValue)
                     }
+
+                Button {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                } label: {
+                    Image(systemName: "gearshape")
+                        .imageScale(.medium)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .accessibilityLabel("Open Settings")
+                .padding(.leading, 4)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -44,9 +55,9 @@ struct SessionPanelView: View {
                     Image(systemName: "terminal")
                         .font(.largeTitle)
                         .foregroundColor(.secondary)
-                    Text("No sessions yet")
+                    Text("No active sessions")
                         .foregroundColor(.secondary)
-                    Text("Start an agent session to see it here.")
+                    Text("Start a Claude Code session in any project to see it here.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
