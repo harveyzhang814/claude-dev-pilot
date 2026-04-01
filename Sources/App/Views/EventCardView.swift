@@ -68,13 +68,15 @@ struct EventCardView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    // Project name — bold, truncated at 20 chars
-                    Text(event.project.count > 20
-                            ? String(event.project.prefix(20)) + "…"
-                            : event.project)
-                        .font(.caption2)
-                        .bold()
-                        .foregroundColor(.secondary)
+                    // Project name — only shown when non-empty, truncated by SwiftUI
+                    if !event.project.isEmpty {
+                        Text(event.project)
+                            .font(.caption2)
+                            .bold()
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
 
                     // Event title
                     Text(event.title)
