@@ -56,6 +56,9 @@ public final class AppState {
             return
         }
 
+        // Install hook script (idempotent — no-op if already up to date)
+        try? HookInstaller.installScript()
+
         // Request notification permission
         notificationsAuthorized = await NotificationService.shared.requestPermission()
 

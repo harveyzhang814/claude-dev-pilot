@@ -1,28 +1,16 @@
 import SwiftUI
+import Core
 
 struct OnboardingView: View {
     @State private var currentStep: Int = 0
     @State private var connectionStatus: ConnectionStatus = .idle
-    @State private var authToken: String = ""
+    @State private var scriptInstalled: Bool = false
+    @State private var scriptError: String? = nil
     var onComplete: (() -> Void)?
 
     enum ConnectionStatus: Equatable {
         case idle, testing, success, failure(String)
     }
-
-    private let hooksJSON = """
-    {
-      "hooks": {
-        "PostToolUse": [{
-          "matcher": ".*",
-          "hooks": [{
-            "type": "command",
-            "command": "curl -s -X POST http://127.0.0.1:9876/event -H 'Authorization: Bearer $AGENT_DEV_PILOT_TOKEN' -H 'Content-Type: application/json' -d @-"
-          }]
-        }]
-      }
-    }
-    """
 
     var body: some View {
         VStack(spacing: 24) {
@@ -92,29 +80,79 @@ struct OnboardingView: View {
 
     private var stepOne: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Step 1: Configure Claude Hooks", systemImage: "1.circle.fill")
+            Label("Step 1: Install Hook Script", systemImage: "1.circle.fill")
                 .font(.headline)
 
-            Text("Add this JSON to your Claude configuration to enable event forwarding:")
+            // Script install status
+            HStack(spacing: 8) {
+                if scriptInstalled {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    Text("Hook script installed at ~/.agent-dev-pilot/hooks/notify.sh")
+                        .foregroundColor(.green)
+                } else if let err = scriptError {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                    Text(err).foregroundColor(.red)
+                } else {
+                    Image(systemName: "circle").foregroundColor(.secondary)
+                    Text("Not yet installed").foregroundColor(.secondary)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
+
+            if !scriptInstalled {
+                Button {
+                    installScript()
+                } label: {
+                    Label("Install Hook Script", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Divider()
+
+            // Claude Code settings prompt
+            Text("Step 1b: Register with Claude Code")
+                .font(.subheadline).fontWeight(.medium)
+
+            Text("Paste this into any Claude Code session to safely register the hook using Claude's own settings mechanism:")
                 .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             ScrollView {
-                Text(hooksJSON)
+                Text(HookInstaller.claudeCodePrompt())
                     .font(.system(.caption, design: .monospaced))
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(NSColor.textBackgroundColor))
                     .cornerRadius(6)
             }
-            .frame(height: 140)
+            .frame(height: 120)
 
             Button {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(hooksJSON, forType: .string)
+                NSPasteboard.general.setString(HookInstaller.claudeCodePrompt(), forType: .string)
             } label: {
-                Label("Copy to Clipboard", systemImage: "doc.on.doc")
+                Label("Copy Prompt", systemImage: "doc.on.doc")
             }
-            .accessibilityLabel("Copy hooks JSON to clipboard")
+            .accessibilityLabel("Copy Claude Code hook install prompt")
+        }
+        .onAppear { checkScriptStatus() }
+    }
+
+    private func checkScriptStatus() {
+        scriptInstalled = HookInstaller.isScriptInstalled()
+    }
+
+    private func installScript() {
+        do {
+            try HookInstaller.installScript()
+            scriptInstalled = true
+            scriptError = nil
+        } catch {
+            scriptError = "Install failed: \(error.localizedDescription)"
         }
     }
 
