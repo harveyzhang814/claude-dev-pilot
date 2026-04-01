@@ -14,6 +14,7 @@ struct SessionRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.project)
                     .font(.callout)
+                    .bold()
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
@@ -34,7 +35,7 @@ struct SessionRowView: View {
             Spacer()
 
             if let tokens = session.totalTokens {
-                Text("\(tokens) tok")
+                Text(tokenLabel(tokens))
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -96,4 +97,12 @@ struct SessionRowView: View {
         let tokens = session.totalTokens.map { ", \($0) tokens" } ?? ""
         return "\(session.project), \(session.tool), \(statusLabel), \(elapsedTime)\(tokens)"
     }
+}
+
+// Internal so tests can reach it without importing a separate module.
+func tokenLabel(_ count: Int) -> String {
+    if count >= 1000 {
+        return "\(count / 1000)K tok"
+    }
+    return "\(count) tok"
 }
