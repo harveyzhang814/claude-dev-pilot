@@ -9,9 +9,15 @@ struct MenubarPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Needs Attention section
-            if !viewModel.actionEvents.isEmpty {
-                SectionHeader(title: "Needs Attention", count: viewModel.actionEvents.count)
+            SectionHeader(title: "Needs Attention", count: viewModel.actionEvents.isEmpty ? nil : viewModel.actionEvents.count)
 
+            if viewModel.actionEvents.isEmpty {
+                Text("All clear. No sessions need you right now.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            } else {
                 ForEach(viewModel.actionEvents) { event in
                     EventCardView(event: event, onOpenTerminal: onOpenTerminal) {
                         viewModel.dismiss(eventId: event.id)
@@ -19,15 +25,21 @@ struct MenubarPopover: View {
                     .padding(.horizontal, 8)
                     .padding(.bottom, 4)
                 }
-
-                Divider()
-                    .padding(.vertical, 4)
             }
 
-            // Recent Activity section
-            if !viewModel.recentEvents.isEmpty {
-                SectionHeader(title: "Recent Activity", count: nil)
+            Divider()
+                .padding(.vertical, 4)
 
+            // Recent Activity section
+            SectionHeader(title: "Recent Activity", count: nil)
+
+            if viewModel.recentEvents.isEmpty {
+                Text("No events yet. Start a Claude Code session to see activity here.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            } else {
                 ForEach(viewModel.recentEvents.prefix(10)) { event in
                     EventCardView(event: event, onOpenTerminal: onOpenTerminal) {
                         viewModel.dismiss(eventId: event.id)
@@ -35,19 +47,6 @@ struct MenubarPopover: View {
                     .padding(.horizontal, 8)
                     .padding(.bottom, 4)
                 }
-            }
-
-            // Empty state
-            if viewModel.actionEvents.isEmpty && viewModel.recentEvents.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
-                    Text("No recent activity")
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
             }
 
             Divider()
