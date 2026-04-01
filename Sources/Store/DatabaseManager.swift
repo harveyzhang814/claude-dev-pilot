@@ -1,9 +1,9 @@
 import Foundation
 import GRDB
 
-enum DatabaseManager {
+public enum DatabaseManager {
 
-    static func openDatabase(at path: String) throws -> DatabasePool {
+    public static func openDatabase(at path: String) throws -> DatabasePool {
         var config = Configuration()
         config.prepareDatabase { db in
             try db.execute(sql: "PRAGMA journal_mode=WAL")
@@ -13,13 +13,13 @@ enum DatabaseManager {
         return dbPool
     }
 
-    static func openInMemoryDatabase() throws -> DatabaseQueue {
+    public static func openInMemoryDatabase() throws -> DatabaseQueue {
         let dbQueue = try DatabaseQueue()
         try migrate(dbQueue)
         return dbQueue
     }
 
-    static func migrate(_ db: any DatabaseWriter) throws {
+    public static func migrate(_ db: any DatabaseWriter) throws {
         var migrator = DatabaseMigrator()
 
         migrator.registerMigration("v1_initial") { db in
@@ -56,7 +56,7 @@ enum DatabaseManager {
         try migrator.migrate(db)
     }
 
-    static var defaultDatabasePath: String {
+    public static var defaultDatabasePath: String {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let appDir = appSupport.appendingPathComponent("AgentDevPilot")
         try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)

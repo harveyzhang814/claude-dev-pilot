@@ -11,21 +11,57 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
     ],
     targets: [
-        .executableTarget(
-            name: "AgentDevPilot",
+        // Core library: Models, Store, Services (used by both app and server)
+        .target(
+            name: "Core",
             dependencies: [
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Sources",
+            exclude: ["AgentDevPilot", "App", "Server"]
+        ),
+        // Server library: HTTP server with Hummingbird
+        .target(
+            name: "Server",
+            dependencies: [
+                "Core",
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "Sources"
+            path: "Sources/Server"
         ),
+        // Main executable
+        .executableTarget(
+            name: "AgentDevPilot",
+            dependencies: [
+                "Core",
+                "Server",
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Sources",
+            sources: ["AgentDevPilot", "App"]
+        ),
+        // Tests for core functionality
         .testTarget(
             name: "AgentDevPilotTests",
             dependencies: [
-                "AgentDevPilot",
+                "Core",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "Tests"
+            path: "Tests",
+            exclude: ["ServerTests"]
+        ),
+        // Tests for HTTP server
+        .testTarget(
+            name: "ServerTests",
+            dependencies: [
+                "Server",
+                "Core",
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Tests/ServerTests"
         ),
     ]
 )

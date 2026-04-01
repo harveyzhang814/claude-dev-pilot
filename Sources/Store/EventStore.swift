@@ -1,36 +1,36 @@
 import Foundation
 import GRDB
 
-enum EventStore {
-    static func insert(_ event: DevEvent, in db: any DatabaseWriter) throws {
+public enum EventStore {
+    public static func insert(_ event: DevEvent, in db: any DatabaseWriter) throws {
         try db.write { db in try event.insert(db) }
     }
 
-    static func fetch(id: String, in db: any DatabaseReader) throws -> DevEvent? {
+    public static func fetch(id: String, in db: any DatabaseReader) throws -> DevEvent? {
         try db.read { db in try DevEvent.fetchOne(db, key: id) }
     }
 
-    static func fetchRecent(limit: Int, in db: any DatabaseReader) throws -> [DevEvent] {
+    public static func fetchRecent(limit: Int, in db: any DatabaseReader) throws -> [DevEvent] {
         try db.read { db in
             try DevEvent.order(DevEvent.Columns.timestamp.desc).limit(limit).fetchAll(db)
         }
     }
 
-    static func fetchForSession(_ sessionId: String, in db: any DatabaseReader) throws -> [DevEvent] {
+    public static func fetchForSession(_ sessionId: String, in db: any DatabaseReader) throws -> [DevEvent] {
         try db.read { db in
             try DevEvent.filter(DevEvent.Columns.sessionId == sessionId)
                 .order(DevEvent.Columns.timestamp.desc).fetchAll(db)
         }
     }
 
-    static func countActionTier(in db: any DatabaseReader) throws -> Int {
+    public static func countActionTier(in db: any DatabaseReader) throws -> Int {
         try db.read { db in
             try DevEvent.filter(DevEvent.Columns.attentionTier == AttentionTier.action.rawValue).fetchCount(db)
         }
     }
 
     @discardableResult
-    static func pruneOlderThan(days: Int, in db: any DatabaseWriter) throws -> Int {
+    public static func pruneOlderThan(days: Int, in db: any DatabaseWriter) throws -> Int {
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())!
         // GRDB stores dates in "YYYY-MM-DD HH:MM:SS.SSS" format; use DatabaseDateComponents for correct comparison.
         let calendar = Calendar(identifier: .gregorian)

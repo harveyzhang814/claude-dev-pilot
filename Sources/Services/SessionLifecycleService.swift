@@ -1,9 +1,9 @@
 import Foundation
 import GRDB
 
-enum SessionLifecycleService {
+public enum SessionLifecycleService {
     /// Processes a DevEvent: creates/updates the session, inserts the event, transitions session state.
-    static func processEvent(_ event: DevEvent, in db: any DatabaseWriter) throws {
+    public static func processEvent(_ event: DevEvent, in db: any DatabaseWriter) throws {
         try db.write { db in
             let existingSession = try DevSession.fetchOne(db, key: event.sessionId)
 

@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import AgentDevPilot
+@testable import Core
 
 @Suite("AuthTokenService")
 struct AuthTokenServiceTests {

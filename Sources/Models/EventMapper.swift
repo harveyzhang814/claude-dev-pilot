@@ -1,9 +1,9 @@
 import Foundation
 
-enum EventMapper {
+public enum EventMapper {
 
     /// Maps a raw hook payload to an internal DevEvent.
-    static func map(_ payload: HookPayload) -> DevEvent {
+    public static func map(_ payload: HookPayload) -> DevEvent {
         let eventType = inferEventType(payload)
         let tier = attentionTier(for: eventType)
         let rawJson = encodePayload(payload)
@@ -25,7 +25,7 @@ enum EventMapper {
     // MARK: - EventType Inference
 
     /// Priority: notification_type (deterministic) > text matching (fallback) > .taskCompleted (safe default)
-    static func inferEventType(_ payload: HookPayload) -> EventType {
+    public static func inferEventType(_ payload: HookPayload) -> EventType {
         if let notifType = payload.notificationType {
             switch notifType {
             case "permission_prompt", "elicitation_dialog":
@@ -66,7 +66,7 @@ enum EventMapper {
 
     // MARK: - AttentionTier
 
-    static func attentionTier(for eventType: EventType) -> AttentionTier {
+    public static func attentionTier(for eventType: EventType) -> AttentionTier {
         switch eventType {
         case .permissionNeeded:
             return .action
@@ -79,7 +79,7 @@ enum EventMapper {
 
     // MARK: - Helpers
 
-    static func projectName(from cwd: String) -> String {
+    public static func projectName(from cwd: String) -> String {
         URL(fileURLWithPath: cwd).lastPathComponent
     }
 

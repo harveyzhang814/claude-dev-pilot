@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import GRDB
-@testable import AgentDevPilot
+@testable import Core
 
 @Suite("EventStore")
 struct EventStoreTests {
