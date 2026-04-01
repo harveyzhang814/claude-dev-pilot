@@ -47,13 +47,14 @@ public enum SessionStore {
         var components = calendar.dateComponents(in: TimeZone(identifier: "UTC")!, from: cutoffDate)
         components.timeZone = TimeZone(identifier: "UTC")
         let cutoff = DatabaseDateComponents(components, format: .YMD_HMSS)
+        let now = ISO8601DateFormatter().string(from: Date())
         return try db.write { db in
             try db.execute(sql: """
-                UPDATE sessions SET status = 'stale'
+                UPDATE sessions SET status = 'stale', ended_at = ?
                 WHERE status IN ('running', 'waiting')
                 AND started_at < ?
                 AND id NOT IN (SELECT DISTINCT session_id FROM events WHERE timestamp > ?)
-                """, arguments: [cutoff, cutoff])
+                """, arguments: [now, cutoff, cutoff])
             return db.changesCount
         }
     }
