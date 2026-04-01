@@ -27,6 +27,12 @@ public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, Persis
     public let attentionTier: AttentionTier
     public let isDismissed: Bool
 
+    /// Project name derived from the `detail` working-directory path.
+    public var project: String {
+        guard let cwd = detail, !cwd.isEmpty else { return "" }
+        return URL(fileURLWithPath: cwd).lastPathComponent
+    }
+
     public static let databaseTableName = "events"
 
     public enum Columns: String, ColumnExpression {

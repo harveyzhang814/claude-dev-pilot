@@ -59,44 +59,47 @@ struct EventCardView: View {
                 .fill(tierColor)
                 .frame(width: 3)
 
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 // SF Symbol icon
                 Image(systemName: tierIcon)
                     .foregroundColor(tierColor)
                     .frame(width: 16, height: 16)
+                    .padding(.top, 1)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    // Project name from detail
-                    if let detail = event.detail, !detail.isEmpty {
-                        Text(URL(fileURLWithPath: detail).lastPathComponent)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
+                    // Project name — bold, truncated at 20 chars
+                    Text(event.project.count > 20
+                            ? String(event.project.prefix(20)) + "…"
+                            : event.project)
+                        .font(.caption2)
+                        .bold()
+                        .foregroundColor(.secondary)
 
-                    // Title
+                    // Event title
                     Text(event.title)
                         .font(.callout)
                         .lineLimit(2)
 
-                    // Relative timestamp — updates every 30s to avoid per-second layout jumps
-                    TimelineView(.periodic(from: .now, by: 30)) { _ in
-                        Text(relativeTime(event.timestamp))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                    // Action button below title for permission/error events
+                    if event.attentionTier == .action || event.type == .taskError {
+                        Button("Open Terminal") {
+                            onOpenTerminal?(event.detail ?? "")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .accessibilityLabel("Open terminal for \(event.title)")
+                        .padding(.top, 2)
                     }
                 }
 
                 Spacer()
 
-                // Open Terminal button for action/error events
-                if event.attentionTier == .action || event.type == .taskError {
-                    Button("Open Terminal") {
-                        onOpenTerminal?(event.detail ?? "")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .accessibilityLabel("Open terminal for \(event.title)")
+                // Relative timestamp — right-aligned
+                TimelineView(.periodic(from: .now, by: 30)) { _ in
+                    Text(relativeTime(event.timestamp))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
             .padding(.horizontal, 10)
@@ -136,8 +139,7 @@ struct EventCardView: View {
     }
 
     private var accessibilityDescription: String {
-        let project = event.detail.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
         let time = RelativeDateTimeFormatter().localizedString(for: event.timestamp, relativeTo: Date())
-        return "\(event.title), \(project), \(time)"
+        return "\(event.title), \(event.project), \(time)"
     }
 }
