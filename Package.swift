@@ -17,8 +17,7 @@ let package = Package(
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "Sources",
-            exclude: ["AgentDevPilot", "App", "Server"]
+            path: "Sources/Core"
         ),
         // Server library: HTTP server with Hummingbird
         .target(
@@ -39,8 +38,7 @@ let package = Package(
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "Sources",
-            sources: ["AgentDevPilot", "App"]
+            path: "Sources/App"
         ),
         // Tests for core functionality
         .testTarget(
