@@ -1,9 +1,10 @@
 APP_NAME    = AgentDevPilot
 BUILD_DIR   = .build/debug
+RELEASE_DIR = .build/release
 APP_BUNDLE  = $(APP_NAME).app
 CONTENTS    = $(APP_BUNDLE)/Contents
 
-.PHONY: build bundle run clean
+.PHONY: build bundle run release dist clean
 
 build:
 	swift build -c debug 2>&1
@@ -20,6 +21,18 @@ run: bundle
 	sleep 0.5
 	open $(APP_BUNDLE)
 	@echo "App launched."
+
+# Release build — optimized binary, suitable for installing to /Applications
+release:
+	swift build -c release 2>&1
+
+dist: release
+	mkdir -p $(CONTENTS)/MacOS
+	cp $(RELEASE_DIR)/$(APP_NAME) $(CONTENTS)/MacOS/$(APP_NAME)
+	cp Sources/App/Info.plist $(CONTENTS)/Info.plist
+	codesign --force --deep --sign - $(APP_BUNDLE)
+	@echo ""
+	@echo "✓ $(APP_BUNDLE) ready — drag to /Applications to install."
 
 clean:
 	rm -rf $(APP_BUNDLE)
