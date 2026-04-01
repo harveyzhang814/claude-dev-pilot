@@ -17,4 +17,9 @@ struct ViewUtilsTests {
     @Test func tokenLabel_zero() {
         #expect(tokenLabel(0) == "0 tok")
     }
+
+    @Test func tokenLabel_truncationBoundary() {
+        // 1500 / 1000 = 1 (integer division truncates, not rounds)
+        #expect(tokenLabel(1500) == "1K tok")
+    }
 }

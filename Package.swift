@@ -54,6 +54,7 @@ let package = Package(
             name: "AgentDevPilotTests",
             dependencies: [
                 "Core",
+                "AgentDevPilot",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Tests",
