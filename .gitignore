@@ -1,5 +1,6 @@
 .build/
 .swiftpm/
+AgentDevPilot.app/
 *.xcodeproj/
 xcuserdata/
 DerivedData/
