@@ -4,8 +4,55 @@ import Core
 struct EventCardView: View {
     let event: DevEvent
     var onOpenTerminal: ((String) -> Void)?
+    var onDismiss: (() -> Void)?
+
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDismissing = false
 
     var body: some View {
+        ZStack(alignment: .trailing) {
+            // Red "Done" background revealed on swipe
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.red)
+                .overlay(
+                    Image(systemName: "checkmark")
+                        .foregroundColor(.white)
+                        .padding(.trailing, 16),
+                    alignment: .trailing
+                )
+
+            cardContent
+                .offset(x: dragOffset)
+                .gesture(
+                    DragGesture(minimumDistance: 10, coordinateSpace: .local)
+                        .onChanged { value in
+                            guard !isDismissing else { return }
+                            // Only allow leftward drag
+                            let x = min(0, value.translation.width)
+                            dragOffset = x
+                        }
+                        .onEnded { value in
+                            guard !isDismissing else { return }
+                            if value.translation.width < -80 {
+                                // Commit dismiss
+                                isDismissing = true
+                                withAnimation(.easeIn(duration: 0.2)) {
+                                    dragOffset = -360
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    onDismiss?()
+                                }
+                            } else {
+                                withAnimation(.spring(response: 0.3)) {
+                                    dragOffset = 0
+                                }
+                            }
+                        }
+                )
+        }
+    }
+
+    private var cardContent: some View {
         HStack(spacing: 0) {
             // Status color bar (3px)
             Rectangle()
@@ -32,10 +79,12 @@ struct EventCardView: View {
                         .font(.callout)
                         .lineLimit(2)
 
-                    // Relative timestamp
-                    Text(event.timestamp, style: .relative)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    // Relative timestamp — updates every 30s to avoid per-second layout jumps
+                    TimelineView(.periodic(from: .now, by: 30)) { _ in
+                        Text(relativeTime(event.timestamp))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -73,6 +122,16 @@ struct EventCardView: View {
         case .taskCompleted: return "checkmark.circle.fill"
         case .taskError: return "xmark.circle.fill"
         case .taskStarted: return "arrow.clockwise"
+        }
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let seconds = Int(-date.timeIntervalSinceNow)
+        switch seconds {
+        case ..<60:    return "just now"
+        case ..<3600:  return "\(seconds / 60)m ago"
+        case ..<86400: return "\(seconds / 3600)h ago"
+        default:       return "\(seconds / 86400)d ago"
         }
     }
 

@@ -11,14 +11,23 @@ public final class PopoverViewModel {
     public var actionCount: Int = 0
 
     private var cancellables: Set<AnyCancellable> = []
+    private var db: (any DatabaseReader & DatabaseWriter)?
 
     public init() {}
 
+    public func dismiss(eventId: String) {
+        guard let db else { return }
+        try? EventStore.dismiss(id: eventId, in: db)
+    }
+
     public func startObserving(db: any DatabaseReader & DatabaseWriter) {
-        // Observe action-tier events
+        self.db = db
+
+        // Observe undismissed action-tier events
         let actionObservation = ValueObservation.tracking { db in
             try DevEvent
                 .filter(DevEvent.Columns.attentionTier == AttentionTier.action.rawValue)
+                .filter(DevEvent.Columns.isDismissed == false)
                 .order(DevEvent.Columns.timestamp.desc)
                 .limit(50)
                 .fetchAll(db)
@@ -37,10 +46,11 @@ public final class PopoverViewModel {
             )
             .store(in: &cancellables)
 
-        // Observe non-background events (action + review tiers)
+        // Observe undismissed non-background events (action + review tiers)
         let recentObservation = ValueObservation.tracking { db in
             try DevEvent
                 .filter(DevEvent.Columns.attentionTier != AttentionTier.background.rawValue)
+                .filter(DevEvent.Columns.isDismissed == false)
                 .order(DevEvent.Columns.timestamp.desc)
                 .limit(100)
                 .fetchAll(db)

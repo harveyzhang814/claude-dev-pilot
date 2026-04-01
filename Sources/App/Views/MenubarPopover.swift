@@ -13,9 +13,11 @@ struct MenubarPopover: View {
                 SectionHeader(title: "Needs Attention", count: viewModel.actionEvents.count)
 
                 ForEach(viewModel.actionEvents) { event in
-                    EventCardView(event: event, onOpenTerminal: onOpenTerminal)
-                        .padding(.horizontal, 8)
-                        .padding(.bottom, 4)
+                    EventCardView(event: event, onOpenTerminal: onOpenTerminal) {
+                        viewModel.dismiss(eventId: event.id)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
                 }
 
                 Divider()
@@ -27,9 +29,11 @@ struct MenubarPopover: View {
                 SectionHeader(title: "Recent Activity", count: nil)
 
                 ForEach(viewModel.recentEvents.prefix(10)) { event in
-                    EventCardView(event: event, onOpenTerminal: onOpenTerminal)
-                        .padding(.horizontal, 8)
-                        .padding(.bottom, 4)
+                    EventCardView(event: event, onOpenTerminal: onOpenTerminal) {
+                        viewModel.dismiss(eventId: event.id)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
                 }
             }
 

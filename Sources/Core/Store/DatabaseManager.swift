@@ -53,6 +53,12 @@ public enum DatabaseManager {
             try db.create(index: "idx_sessions_status", on: "sessions", columns: ["status"], ifNotExists: true)
         }
 
+        migrator.registerMigration("v2_dismissed") { db in
+            try db.alter(table: "events") { t in
+                t.add(column: "is_dismissed", .boolean).notNull().defaults(to: false)
+            }
+        }
+
         try migrator.migrate(db)
     }
 

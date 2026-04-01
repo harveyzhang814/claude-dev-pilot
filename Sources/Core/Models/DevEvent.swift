@@ -25,6 +25,7 @@ public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, Persis
     public let durationSeconds: Double?
     public let timestamp: Date
     public let attentionTier: AttentionTier
+    public var isDismissed: Bool
 
     public static let databaseTableName = "events"
 
@@ -33,6 +34,7 @@ public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, Persis
         case payload, tokenCount = "token_count"
         case durationSeconds = "duration_seconds"
         case timestamp, attentionTier = "attention_tier"
+        case isDismissed = "is_dismissed"
     }
 
     public enum CodingKeys: String, CodingKey {
@@ -43,6 +45,7 @@ public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, Persis
         case durationSeconds = "duration_seconds"
         case timestamp
         case attentionTier = "attention_tier"
+        case isDismissed = "is_dismissed"
     }
 
     public init(
@@ -55,7 +58,8 @@ public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, Persis
         tokenCount: Int?,
         durationSeconds: Double?,
         timestamp: Date,
-        attentionTier: AttentionTier
+        attentionTier: AttentionTier,
+        isDismissed: Bool = false
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -67,5 +71,6 @@ public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, Persis
         self.durationSeconds = durationSeconds
         self.timestamp = timestamp
         self.attentionTier = attentionTier
+        self.isDismissed = isDismissed
     }
 }
