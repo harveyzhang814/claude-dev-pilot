@@ -38,7 +38,16 @@ let package = Package(
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "Sources/App"
+            path: "Sources/App",
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Sources/App/Info.plist",
+                ]),
+            ]
         ),
         // Tests for core functionality
         .testTarget(
