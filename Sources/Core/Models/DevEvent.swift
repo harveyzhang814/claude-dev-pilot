@@ -25,7 +25,7 @@ public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, Persis
     public let durationSeconds: Double?
     public let timestamp: Date
     public let attentionTier: AttentionTier
-    public var isDismissed: Bool
+    public let isDismissed: Bool
 
     public static let databaseTableName = "events"
 

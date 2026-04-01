@@ -17,7 +17,11 @@ public final class PopoverViewModel {
 
     public func dismiss(eventId: String) {
         guard let db else { return }
-        try? EventStore.dismiss(id: eventId, in: db)
+        do {
+            try EventStore.dismiss(id: eventId, in: db)
+        } catch {
+            print("[AgentDevPilot] dismiss failed for event \(eventId): \(error)")
+        }
     }
 
     public func startObserving(db: any DatabaseReader & DatabaseWriter) {

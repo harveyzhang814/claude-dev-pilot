@@ -31,10 +31,9 @@ public enum EventStore {
 
     public static func dismiss(id: String, in db: any DatabaseWriter) throws {
         try db.write { db in
-            try db.execute(
-                sql: "UPDATE events SET is_dismissed = 1 WHERE id = ?",
-                arguments: [id]
-            )
+            try DevEvent
+                .filter(DevEvent.Columns.id == id)
+                .updateAll(db, DevEvent.Columns.isDismissed.set(to: true))
         }
     }
 
