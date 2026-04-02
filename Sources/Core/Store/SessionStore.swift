@@ -38,6 +38,39 @@ public enum SessionStore {
         }
     }
 
+    /// Returns running/waiting sessions that have had no event activity in the last `seconds`.
+    /// Callers can inspect each session's `tty` before deciding whether to mark stale.
+    public static func fetchStaleCandidates(olderThan seconds: TimeInterval, in db: any DatabaseReader) throws -> [DevSession] {
+        let cutoffDate = Date(timeIntervalSinceNow: -seconds)
+        let calendar = Calendar(identifier: .gregorian)
+        var components = calendar.dateComponents(in: TimeZone(identifier: "UTC")!, from: cutoffDate)
+        components.timeZone = TimeZone(identifier: "UTC")
+        let cutoff = DatabaseDateComponents(components, format: .YMD_HMSS)
+        return try db.read { db in
+            try DevSession.fetchAll(db, sql: """
+                SELECT * FROM sessions
+                WHERE status IN ('running', 'waiting')
+                AND started_at < ?
+                AND id NOT IN (SELECT DISTINCT session_id FROM events WHERE timestamp > ?)
+                """, arguments: [cutoff, cutoff])
+        }
+    }
+
+    /// Marks specific sessions as stale (used after TTY-liveness filtering).
+    public static func markStale(ids: [String], in db: any DatabaseWriter) throws {
+        guard !ids.isEmpty else { return }
+        let now = ISO8601DateFormatter().string(from: Date())
+        let placeholders = repeatElement("?", count: ids.count).joined(separator: ", ")
+        try db.write { db in
+            var arguments = StatementArguments([now])
+            for id in ids { arguments += [id] }
+            try db.execute(
+                sql: "UPDATE sessions SET status = 'stale', ended_at = ? WHERE id IN (\(placeholders))",
+                arguments: arguments
+            )
+        }
+    }
+
     @discardableResult
     public static func markStaleSessions(olderThan seconds: TimeInterval, in db: any DatabaseWriter) throws -> Int {
         // GRDB stores dates in "YYYY-MM-DD HH:MM:SS.SSS" format (no T separator).
