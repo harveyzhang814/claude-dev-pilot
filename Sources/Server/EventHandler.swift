@@ -17,37 +17,57 @@ enum EventHandler {
             // Collect body (max 64 KB)
             let buffer = try await request.body.collect(upTo: 64 * 1024)
             let data = Data(buffer: buffer)
+            let rawPayload = String(data: data, encoding: .utf8) ?? "[non-UTF-8 body]"
 
             // Parse HookPayload
-            let payload: HookPayload
+            let payload: HookPayload?
+            let parseError: Error?
             do {
                 payload = try JSONDecoder().decode(HookPayload.self, from: data)
-            } catch {
+                parseError = nil
+            } catch let e {
+                payload = nil
+                parseError = e
+            }
+
+            // Insert HookLog with final state (fire-and-forget)
+            let log = HookLog(
+                receivedAt: Date(),
+                hookEventName: payload?.hookEventName ?? "PARSE_ERROR",
+                sessionId: payload?.sessionId ?? "",
+                notificationType: payload?.notificationType,
+                rawPayload: rawPayload
+            )
+            try? await db.write { db in try log.insert(db) }
+
+            // If parse failed, return 400
+            if let error = parseError {
                 throw HTTPError(.badRequest, message: "Invalid JSON payload: \(error.localizedDescription)")
             }
 
+            // payload is guaranteed non-nil here: parseError guard above ensures decode succeeded
+            let decoded = payload!
+
             // SessionStart / SessionEnd → lifecycle only, no DevEvent
-            if payload.hookEventName == "SessionStart" || payload.hookEventName == "SessionEnd" {
-                try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+            if decoded.hookEventName == "SessionStart" || decoded.hookEventName == "SessionEnd" {
+                try SessionLifecycleService.handleSessionLifecycle(payload: decoded, in: db)
                 return Response(status: .ok, headers: [:], body: .init())
             }
 
             // Map payload → DevEvent and persist
-            let event = EventMapper.map(payload)
-            try SessionLifecycleService.processEvent(event, sessionTitle: payload.title, in: db)
+            let event = EventMapper.map(decoded)
+            try SessionLifecycleService.processEvent(event, sessionTitle: decoded.title, in: db)
 
-            // Feed Stop and Notification events into the stop window for coalesced state resolution
-            switch payload.hookEventName {
+            // Feed Stop and Notification events into the stop window
+            switch decoded.hookEventName {
             case "Stop":
-                await stopWindow.recordStop(sessionId: payload.sessionId)
+                await stopWindow.recordStop(sessionId: decoded.sessionId)
             case "Notification":
-                switch payload.notificationType {
+                switch decoded.notificationType {
                 case "permission_prompt", "elicitation_dialog":
-                    // Permission notifications: set hasNotification → window resolves to waiting
-                    await stopWindow.recordNotification(sessionId: payload.sessionId)
+                    await stopWindow.recordNotification(sessionId: decoded.sessionId)
                 case "idle_prompt":
-                    // idle_prompt behaves like Stop: extends the window but resolves to idle
-                    await stopWindow.recordStop(sessionId: payload.sessionId)
+                    await stopWindow.recordStop(sessionId: decoded.sessionId)
                 default:
                     break
                 }
