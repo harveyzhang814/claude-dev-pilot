@@ -288,6 +288,47 @@ struct SessionLifecycleTests {
         #expect(session?.terminalApp == "Apple_Terminal")
     }
 
+    // MARK: - authSuccess tests
+
+    @Test("authSuccess sets session to busy and dismisses all prior notifications")
+    func authSuccessBehavesBusy() throws {
+        let db = try makeDB()
+        try db.write { db in
+            var s = DevSession(
+                id: "s-auth", project: "proj", cwd: "/p", tool: "claude-code",
+                status: .waiting, startedAt: Date(), endedAt: nil,
+                totalTokens: nil, lastEventTitle: nil
+            )
+            try s.insert(db)
+            var permCard = DevEvent(
+                id: "e-perm", sessionId: "s-auth", type: .permissionNeeded,
+                title: "Allow bash", detail: "/p", payload: "{}",
+                tokenCount: nil, durationSeconds: nil,
+                timestamp: Date(), attentionTier: .action
+            )
+            try permCard.insert(db)
+        }
+
+        let event = DevEvent(
+            id: UUID().uuidString, sessionId: "s-auth", type: .authSuccess,
+            title: "Permission granted", detail: "/p", payload: "{}",
+            tokenCount: nil, durationSeconds: nil,
+            timestamp: Date(), attentionTier: .background
+        )
+        try SessionLifecycleService.processEvent(event, in: db)
+
+        let session = try SessionStore.fetch(id: "s-auth", in: db)
+        #expect(session?.status == .busy)
+
+        let undismissed = try db.read { db in
+            try DevEvent
+                .filter(DevEvent.Columns.sessionId == "s-auth")
+                .filter(DevEvent.Columns.isDismissed == false)
+                .fetchCount(db)
+        }
+        #expect(undismissed == 0)
+    }
+
     // MARK: - custom_name / displayName tests
 
     @Test("SessionStart with -n flag stores customName on new session")
