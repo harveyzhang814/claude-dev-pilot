@@ -102,6 +102,24 @@ struct EventStoreGroupedTests {
         #expect(grouped["s1"]?.first?.id == "e2")
     }
 
+    @Test("excludes events for sessions not in sessionIds")
+    func excludesOtherSessions() throws {
+        let db = try makeDB()
+        var s1 = makeSession(id: "s1")
+        var s3 = makeSession(id: "s3")
+        try db.write { db in
+            try s1.insert(db)
+            try s3.insert(db)
+            try makeEvent(id: "e1", sessionId: "s1").insert(db)
+            try makeEvent(id: "e3", sessionId: "s3").insert(db)
+        }
+        let grouped = try db.read { db in
+            try EventStore.fetchGroupedBySession(sessionIds: ["s1"], in: db)
+        }
+        #expect(grouped["s1"]?.count == 1)
+        #expect(grouped["s3"] == nil)
+    }
+
     @Test("returns empty dict for empty sessionIds")
     func emptySessionIds() throws {
         let db = try makeDB()
