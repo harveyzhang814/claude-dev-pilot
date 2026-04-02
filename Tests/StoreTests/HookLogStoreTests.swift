@@ -29,4 +29,31 @@ struct HookLogStoreTests {
         #expect(results[0].hookEventName == "Notification")
         #expect(results[0].notificationType == "permission_prompt")
     }
+
+    @Test("fetchForSession returns logs newest-first")
+    func fetchForSessionOrdering() async throws {
+        let db = try makeDB()
+        let now = Date()
+        let older = HookLog(
+            receivedAt: now.addingTimeInterval(-10),
+            hookEventName: "Stop",
+            sessionId: "sess-order",
+            notificationType: nil,
+            rawPayload: "{}"
+        )
+        let newer = HookLog(
+            receivedAt: now,
+            hookEventName: "Notification",
+            sessionId: "sess-order",
+            notificationType: nil,
+            rawPayload: "{}"
+        )
+        try HookLogStore.insert(older, in: db)
+        try HookLogStore.insert(newer, in: db)
+
+        let results = try HookLogStore.fetchForSession("sess-order", in: db)
+        #expect(results.count == 2)
+        #expect(results[0].hookEventName == "Notification")  // newer first
+        #expect(results[1].hookEventName == "Stop")
+    }
 }

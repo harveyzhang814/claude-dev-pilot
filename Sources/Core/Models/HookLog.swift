@@ -30,7 +30,7 @@ public struct HookLog: Codable, Identifiable, Sendable, FetchableRecord, Persist
     }
 
     public init(
-        id: String,
+        id: String = UUID().uuidString,
         receivedAt: Date,
         hookEventName: String,
         sessionId: String,
