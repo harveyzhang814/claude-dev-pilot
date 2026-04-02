@@ -6,11 +6,13 @@ public struct HookPayload: Codable, Sendable {
     public let sessionId: String
     public let cwd: String
     public let hookEventName: String
-    public let message: String
+    public let message: String        // optional on wire, defaults to ""
     public let transcriptPath: String?
     public let title: String?
     public let notificationType: String?
     public let permissionMode: String?
+    public let source: String?        // SessionStart: "startup"|"resume"|"clear"|"compact"
+    public let model: String?         // SessionStart: e.g. "claude-sonnet-4-6"
 
     public enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -21,17 +23,35 @@ public struct HookPayload: Codable, Sendable {
         case title
         case notificationType = "notification_type"
         case permissionMode = "permission_mode"
+        case source
+        case model
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        cwd = try c.decode(String.self, forKey: .cwd)
+        hookEventName = try c.decode(String.self, forKey: .hookEventName)
+        message = (try? c.decodeIfPresent(String.self, forKey: .message)) ?? ""
+        transcriptPath = try? c.decodeIfPresent(String.self, forKey: .transcriptPath)
+        title = try? c.decodeIfPresent(String.self, forKey: .title)
+        notificationType = try? c.decodeIfPresent(String.self, forKey: .notificationType)
+        permissionMode = try? c.decodeIfPresent(String.self, forKey: .permissionMode)
+        source = try? c.decodeIfPresent(String.self, forKey: .source)
+        model = try? c.decodeIfPresent(String.self, forKey: .model)
     }
 
     public init(
         sessionId: String,
         cwd: String,
         hookEventName: String,
-        message: String,
+        message: String = "",
         transcriptPath: String? = nil,
         title: String? = nil,
         notificationType: String? = nil,
-        permissionMode: String? = nil
+        permissionMode: String? = nil,
+        source: String? = nil,
+        model: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -41,5 +61,7 @@ public struct HookPayload: Codable, Sendable {
         self.title = title
         self.notificationType = notificationType
         self.permissionMode = permissionMode
+        self.source = source
+        self.model = model
     }
 }

@@ -71,6 +71,38 @@ struct HookPayloadTests {
         #expect(payload == nil)
     }
 
+    @Test("SessionStart payload with source and model fields")
+    func testSessionStartPayloadDecoding() throws {
+        let json = """
+        {
+            "session_id": "abc123",
+            "cwd": "/Users/me/Projects/myapp",
+            "hook_event_name": "SessionStart",
+            "source": "startup",
+            "model": "claude-sonnet-4-6"
+        }
+        """.data(using: .utf8)!
+        let payload = try JSONDecoder().decode(HookPayload.self, from: json)
+        #expect(payload.hookEventName == "SessionStart")
+        #expect(payload.source == "startup")
+        #expect(payload.model == "claude-sonnet-4-6")
+        #expect(payload.message == "")  // default when omitted
+    }
+
+    @Test("SessionEnd payload without message field")
+    func testSessionEndPayloadDecodingWithoutMessage() throws {
+        let json = """
+        {
+            "session_id": "abc123",
+            "cwd": "/Users/me/Projects/myapp",
+            "hook_event_name": "SessionEnd"
+        }
+        """.data(using: .utf8)!
+        let payload = try JSONDecoder().decode(HookPayload.self, from: json)
+        #expect(payload.hookEventName == "SessionEnd")
+        #expect(payload.message == "")
+    }
+
     @Test("Unknown fields are ignored")
     func unknownFieldsIgnored() throws {
         let json = """
