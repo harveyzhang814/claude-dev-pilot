@@ -2,11 +2,14 @@ import SwiftUI
 import Core
 
 struct SettingsView: View {
+    let appState: AppState
+
     @AppStorage("serverPort") private var serverPort: Int = 9876
     @AppStorage("soundEnabled") private var soundEnabled: Bool = true
     @AppStorage("retentionDays") private var retentionDays: Int = 30
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     @AppStorage("alwaysOnTop") private var alwaysOnTop: Bool = false
+    @AppStorage("floatWindowMode") private var floatWindowMode: Bool = false
 
     @State private var showRecentPayloads: Bool = false
     @State private var recentPayloads: [String] = []
@@ -14,6 +17,17 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Display") {
+                Picker("Mode", selection: $floatWindowMode) {
+                    Text("Menubar Popover").tag(false)
+                    Text("Float Window").tag(true)
+                }
+                .pickerStyle(.inline)
+                .onChange(of: floatWindowMode) { _, newValue in
+                    appState.setFloatWindowMode(newValue)
+                }
+            }
+
             // Server section
             Section("Server") {
                 HStack {
