@@ -1,0 +1,18 @@
+#!/bin/sh
+# $1 = remote name, $2 = remote URL（未使用亦可）
+ZERO_SHA=0000000000000000000000000000000000000000
+
+while read -r local_ref local_sha remote_ref remote_sha
+do
+    [ "$local_sha" = "$ZERO_SHA" ] || continue
+    [ -n "$remote_ref" ] || continue
+    case "$remote_ref" in
+        refs/heads/main|refs/heads/staging)
+            echo "❌ 禁止删除受保护分支: ${remote_ref#refs/heads/}"
+            echo "   （通过 push 删除远程分支已被拦截；若需调整策略请改 .githooks/pre-push）"
+            exit 1
+            ;;
+    esac
+done
+
+exit 0
