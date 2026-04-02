@@ -18,6 +18,7 @@ struct GhosttyFocuser: TerminalFocuser {
                     if wd is equal to "\(escapedCwd)" then
                         select tab t
                         activate window w
+                        activate
                         set matchCount to 1
                         exit repeat
                     end if
