@@ -26,6 +26,7 @@ struct MenubarPopover: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 36)
+                .accessibilityElement(children: .combine)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -45,6 +46,7 @@ struct MenubarPopover: View {
                     }
                 }
                 .frame(maxHeight: 420)
+                .clipped()
             }
 
             Divider()
