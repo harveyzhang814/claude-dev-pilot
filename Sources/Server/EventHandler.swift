@@ -19,44 +19,33 @@ enum EventHandler {
             let data = Data(buffer: buffer)
             let rawPayload = String(data: data, encoding: .utf8) ?? "[non-UTF-8 body]"
 
-            // Insert preliminary log before any business logic
-            let logId = UUID().uuidString
+            // Parse HookPayload
+            let payload: HookPayload?
+            let parseError: Error?
+            do {
+                payload = try JSONDecoder().decode(HookPayload.self, from: data)
+                parseError = nil
+            } catch let e {
+                payload = nil
+                parseError = e
+            }
+
+            // Insert HookLog with final state (fire-and-forget)
             let log = HookLog(
-                id: logId,
                 receivedAt: Date(),
-                hookEventName: "UNKNOWN",
-                sessionId: "",
-                notificationType: nil,
+                hookEventName: payload?.hookEventName ?? "PARSE_ERROR",
+                sessionId: payload?.sessionId ?? "",
+                notificationType: payload?.notificationType,
                 rawPayload: rawPayload
             )
             try? await db.write { db in try log.insert(db) }
 
-            // Parse HookPayload
-            let payload: HookPayload
-            do {
-                payload = try JSONDecoder().decode(HookPayload.self, from: data)
-            } catch {
-                try? await db.write { db in
-                    try db.execute(
-                        sql: "UPDATE hook_logs SET hook_event_name = 'PARSE_ERROR' WHERE id = ?",
-                        arguments: [logId]
-                    )
-                }
+            // If parse failed, return 400
+            if let error = parseError {
                 throw HTTPError(.badRequest, message: "Invalid JSON payload: \(error.localizedDescription)")
             }
 
-            // Update log with decoded fields
-            try? await db.write { db in
-                try db.execute(
-                    sql: """
-                        UPDATE hook_logs
-                        SET hook_event_name = ?, session_id = ?, notification_type = ?
-                        WHERE id = ?
-                        """,
-                    arguments: [payload.hookEventName, payload.sessionId,
-                                payload.notificationType, logId]
-                )
-            }
+            guard let payload else { throw HTTPError(.internalServerError) }
 
             // SessionStart / SessionEnd → lifecycle only, no DevEvent
             if payload.hookEventName == "SessionStart" || payload.hookEventName == "SessionEnd" {
