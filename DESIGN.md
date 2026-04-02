@@ -83,6 +83,75 @@
 - **Status dot:** instant color change (no transition) — signal clarity over smoothness
 - **No spring animations. No scale bounces.**
 
+## Float Window
+
+A persistent desktop status indicator based on the **minimal attention principle** — three states of increasing information density.
+
+### Color tokens (extends base system)
+
+| State | Dot color | Background tint |
+|-------|-----------|-----------------|
+| `waiting` | `#FF453A` (action) — pulsing | `rgba(255,69,58,0.09)` |
+| `idle` | `#FF9F0A` (amber) — static | `rgba(255,159,10,0.07)` |
+| `running` | `#30D158` (green) — static | none |
+| `stale` | `#636366` (faint) — static | none |
+
+### State 1 — Compact
+
+- Shape: capsule pill, `.regularMaterial` background (frosted glass)
+- One 8pt dot per session, `gap: 5pt`, `padding: 10pt` horizontal + vertical
+- Max 5 dots shown
+- `waiting` dot: slow opacity pulse `1.0 → 0.2`, 1.5s ease-in-out infinite
+- Pill size never changes regardless of state
+
+### State 2 — Hover
+
+- Width: `280pt`, corner radius: `12pt`
+- Single-line rows: `[dot] [name] [status text] [time]`
+  - Dot: 8pt, color = session state
+  - Name: 12px/500, `flex:1`, truncated
+  - Status text: 11px, same color as dot, right-aligned
+  - Time: 10px, `text-faint`, `tabular-nums`, rightmost
+- Row height: `~36pt` (10pt vertical padding)
+- `waiting` row: `rgba(255,69,58,0.09)` background
+- `idle` row: `rgba(255,159,10,0.07)` background
+- `running`/`stale` rows: no background
+- Row hover: `surface2 (#3A3A3C)` background
+- Click row: focus corresponding terminal window
+- **Sort**: original session order preserved; `stale` sessions sink to bottom
+- Toolbar (compact, `~28pt` tall): Settings icon · Dismiss spacer · Expand icon
+  - No Dismiss All — state is hook-driven, not manually managed
+- Collapse: 1s delay after mouse exit, then 300ms ease-in-out → compact
+
+### State 3 — Expanded
+
+- Width: `360pt`, max height `480pt` (scrollable)
+- Session label (lightweight, matches hover row): `[dot] [name] [status text]`
+  - Label font: 11px/500, `text-muted`
+  - Status font: 10px, dot color
+  - Padding: `12pt` top, `6pt` bottom
+- Notification cards are the primary content (not session rows)
+  - `action` tier: `rgba(255,69,58,0.12)` background + `rgba(255,69,58,0.2)` border, title in `#FF453A`
+  - `review` tier: `surface (#2C2C2E)` background + separator border, title in `#FFFFFF`
+  - Card padding: `9pt` vertical, `11pt` horizontal, `8pt` corner radius
+  - Body text: 11px, `text-muted`
+  - Time: 10px, `text-faint`, `tabular-nums`
+  - No swipe-to-dismiss — state driven by hooks only
+- Running session with no events: `"Working..."` italic placeholder, `text-faint`
+- Footer: Session Panel (accent blue) · Quit
+
+### Transitions
+
+| Transition | Delay | Duration | Easing |
+|-----------|-------|----------|--------|
+| Hidden → Compact | 0ms | 150ms | opacity fade |
+| Compact → Hover | 0ms | 200ms | ease-out |
+| Hover → Compact | 1000ms | 300ms | ease-in-out |
+| Any → Expanded | 0ms | 200ms | ease-out |
+| Waiting pulse | — | 1500ms | ease-in-out ∞ |
+
+**Position anchor**: top-Y pinned across all transitions; width expands symmetrically from center-X. Default position: top-center below menubar. Persists across drags via `UserDefaults`.
+
 ## Decisions Log
 
 | Date       | Decision | Rationale |
@@ -92,3 +161,4 @@
 | 2026-04-01 | Near-zero branding chrome | No logo in popover, no accent window frame. Maximum cognitive space for the signal. Requires precise execution to not feel unfinished. |
 | 2026-04-01 | Semantic-only color system | Color = status, not decoration. Users never have to guess what a color means. |
 | 2026-04-01 | Initial design system created | Created by /design-consultation. Researched Raycast, Linear, Warp. |
+| 2026-04-03 | Float Window design approved | Three-state system (compact/hover/expanded). Running=green, waiting=red pulse, idle=amber, stale=gray+disabled. No manual dismiss — state driven by hooks. Session order preserved, stale sinks to bottom. |

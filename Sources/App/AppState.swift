@@ -29,6 +29,11 @@ public final class AppState {
     private var staleTimer: Timer?
     private var lastPruneDate: Date = .distantPast
 
+    // Float window
+    private var floatWindowController: FloatWindowController?
+    /// Set by AgentDevPilotApp at startup; used as the onFocusSession callback for FloatWindowController.
+    var focusSessionHandler: ((DevSession) -> Void)?
+
     // Server task
     private var serverTask: Task<Void, Never>?
 
@@ -81,6 +86,11 @@ public final class AppState {
                 self?.markStaleSessions()
                 self?.lazyPrune()
             }
+        }
+
+        // Restore float window mode if previously enabled
+        if floatWindowMode {
+            setFloatWindowMode(true)
         }
 
         // Start HTTP server
@@ -168,5 +178,29 @@ public final class AppState {
     public func completeOnboarding() {
         UserDefaults.standard.set(true, forKey: "onboardingCompleted")
         showOnboarding = false
+    }
+
+    // MARK: - Float Window
+
+    var floatWindowMode: Bool {
+        UserDefaults.standard.bool(forKey: "floatWindowMode")
+    }
+
+    func setFloatWindowMode(_ enabled: Bool) {
+        if enabled {
+            let handler = focusSessionHandler ?? { _ in }
+            let controller = FloatWindowController(
+                viewModel: popoverViewModel,
+                onFocusSession: handler
+            )
+            floatWindowController = controller
+        } else {
+            floatWindowController?.close()
+            floatWindowController = nil
+        }
+    }
+
+    func toggleFloatWindowExpanded() {
+        floatWindowController?.toggleExpanded()
     }
 }

@@ -54,19 +54,27 @@ struct MenubarPopover: View {
 
             // Footer
             HStack {
-                Button("Session Panel") {
+                Button {
                     openWindow(id: "session-panel")
+                } label: {
+                    Image(systemName: "sidebar.right")
+                        .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.accentColor)
+                .help("Session Panel")
 
                 Spacer()
 
-                Button("Quit") {
+                Button {
                     NSApplication.shared.terminate(nil)
+                } label: {
+                    Image(systemName: "power")
+                        .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
+                .help("Quit")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)

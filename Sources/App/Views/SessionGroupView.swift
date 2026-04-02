@@ -49,24 +49,15 @@ struct SessionGroupView: View {
             .padding(.bottom, 5)
             .accessibilityLabel("\(displayName), \(sessionStatusTag(session)), tap to focus terminal")
 
-            if events.isEmpty {
-                Text("Working...")
-                    .font(.caption)
-                    .italic()
-                    .foregroundColor(.secondary.opacity(0.5))
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
-            } else {
-                ForEach(events) { event in
-                    EventCardView(
-                        event: event,
-                        sessionLabel: nil
-                    ) {
-                        onDismiss(event.id)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 4)
+            ForEach(events) { event in
+                EventCardView(
+                    event: event,
+                    sessionLabel: nil
+                ) {
+                    onDismiss(event.id)
                 }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
             }
         }
         .accessibilityElement(children: .contain)
@@ -76,22 +67,20 @@ struct SessionGroupView: View {
 // Internal so tests can reach without crossing module boundary.
 func sessionStatusTag(_ session: DevSession) -> String {
     switch session.status {
-    case .waiting: return "needs input"
-    case .busy:    return "busy"
-    case .idle:    return "idle"
-    default:
-        assertionFailure("SessionGroupView received unexpected status: \(session.status)")
-        return "idle"
+    case .waiting:   return "Waiting"
+    case .busy:      return "Running"
+    case .idle:      return "Idle"
+    case .stale:     return "Stale"
+    case .completed: return "Done"
     }
 }
 
 func sessionStatusColor(_ session: DevSession) -> Color {
     switch session.status {
-    case .waiting: return Color(red: 1.0, green: 0.271, blue: 0.227)  // #FF453A red
-    case .busy:    return Color(red: 1.0, green: 0.624, blue: 0.039)  // #FF9F0A orange
-    case .idle:    return Color(red: 0.4, green: 0.8,   blue: 0.4)    // muted green
-    default:
-        assertionFailure("SessionGroupView received unexpected status: \(session.status)")
-        return Color(red: 0.4, green: 0.8, blue: 0.4)
+    case .waiting:   return Color(red: 1.0, green: 0.271, blue: 0.227)   // #FF453A red
+    case .busy:      return Color(red: 0.188, green: 0.820, blue: 0.345) // #30D158 green
+    case .idle:      return Color(red: 1.0, green: 0.624, blue: 0.039)   // #FF9F0A amber
+    case .stale:     return Color(red: 0.388, green: 0.388, blue: 0.392) // #636366 gray
+    case .completed: return Color(red: 0.388, green: 0.388, blue: 0.392) // #636366 gray
     }
 }
