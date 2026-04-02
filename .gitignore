@@ -7,3 +7,5 @@ DerivedData/
 .DS_Store
 dist/
 .context/
+.gstack/
+.superpowers/
