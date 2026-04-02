@@ -118,9 +118,32 @@ public final class AppState {
     }
 
     private func markStaleSessions() {
-        guard let db = db else { return }
-        // Sessions with no activity for 30 minutes are stale
-        try? SessionStore.markStaleSessions(olderThan: 30 * 60, in: db)
+        guard let db else { return }
+        do {
+            let candidates = try SessionStore.fetchStaleCandidates(olderThan: 30 * 60, in: db)
+            let toMark = candidates.filter { session in
+                // If we have TTY info, only mark stale when the TTY is no longer alive.
+                // This prevents killing a session that is still running a long task but
+                // happens to be quiet (no hook events) for > 30 minutes.
+                guard let tty = session.tty, !tty.isEmpty else { return true }
+                return !isTTYAlive(tty)
+            }
+            try SessionStore.markStale(ids: toMark.map(\.id), in: db)
+        } catch {
+            print("[AgentDevPilot] markStaleSessions failed: \(error)")
+        }
+    }
+
+    /// Returns true if any process still holds the given TTY device open.
+    private func isTTYAlive(_ tty: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-t", tty]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
     }
 
     public func lazyPrune() {
