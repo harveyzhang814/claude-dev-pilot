@@ -8,11 +8,13 @@ struct FloatWindowCompactView: View {
     let events: [DevEvent]
     let onExpand: () -> Void
 
+    private var visibleEvents: [DevEvent] { Array(events.prefix(5)) }
+
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(events.prefix(5))) { event in
+            ForEach(visibleEvents) { event in
                 CompactEventRow(event: event)
-                if event.id != events.prefix(5).last?.id {
+                if event.id != visibleEvents.last?.id {
                     Divider().padding(.leading, 13)
                 }
             }
@@ -60,11 +62,15 @@ private struct CompactEventRow: View {
     private var tierColor: Color {
         switch event.attentionTier {
         case .action:     return .red
-        case .review:     return Color(red: 0.4, green: 0.8, blue: 0.4)
+        case .review:     return Color(red: 0.4, green: 0.8, blue: 0.4) // matches EventCardView.tierColor
         case .background: return .gray
         }
     }
 
+    // Background-tier events (.promptSubmitted, .agentStopped, .authSuccess) are
+    // filtered out upstream by FloatWindowController (uses viewModel.recentEvents
+    // which only returns .action and .review tier events). All 4 cases are listed
+    // here for exhaustive switch coverage.
     private var tierIcon: String {
         switch event.type {
         case .permissionNeeded: return "exclamationmark.triangle.fill"
