@@ -37,6 +37,25 @@ public enum EventStore {
         }
     }
 
+    /// Undismissed, non-background events grouped by session ID.
+    /// Results within each group are timestamp-descending, capped at `limit`.
+    /// Designed for use inside a `ValueObservation.tracking` closure.
+    public static func fetchGroupedBySession(
+        sessionIds: [String],
+        limit: Int = 5,
+        in db: Database
+    ) throws -> [String: [DevEvent]] {
+        guard !sessionIds.isEmpty else { return [:] }
+        let events = try DevEvent
+            .filter(sessionIds.contains(DevEvent.Columns.sessionId))
+            .filter(DevEvent.Columns.attentionTier != AttentionTier.background.rawValue)
+            .filter(DevEvent.Columns.isDismissed == false)
+            .order(DevEvent.Columns.timestamp.desc)
+            .fetchAll(db)
+        return Dictionary(grouping: events, by: \.sessionId)
+            .mapValues { Array($0.prefix(limit)) }
+    }
+
     @discardableResult
     public static func pruneOlderThan(days: Int, in db: any DatabaseWriter) throws -> Int {
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())!
