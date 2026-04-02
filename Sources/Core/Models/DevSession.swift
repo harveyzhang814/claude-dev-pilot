@@ -7,7 +7,8 @@ public enum SessionStatus: String, Codable, Sendable, DatabaseValueConvertible {
 
 public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, MutablePersistableRecord {
     public let id: String
-    public var project: String
+    public var project: String    // lastPathComponent of cwd
+    public var cwd: String?       // full path (added v3)
     public var tool: String
     public var status: SessionStatus
     public var startedAt: Date
@@ -18,14 +19,14 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     public static let databaseTableName = "sessions"
 
     public enum Columns: String, ColumnExpression {
-        case id, project, tool, status
+        case id, project, cwd, tool, status
         case startedAt = "started_at", endedAt = "ended_at"
         case totalTokens = "total_tokens"
         case lastEventTitle = "last_event_title"
     }
 
     public enum CodingKeys: String, CodingKey {
-        case id, project, tool, status
+        case id, project, cwd, tool, status
         case startedAt = "started_at"
         case endedAt = "ended_at"
         case totalTokens = "total_tokens"
@@ -35,6 +36,7 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     public init(
         id: String,
         project: String,
+        cwd: String? = nil,
         tool: String,
         status: SessionStatus,
         startedAt: Date,
@@ -44,6 +46,7 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     ) {
         self.id = id
         self.project = project
+        self.cwd = cwd
         self.tool = tool
         self.status = status
         self.startedAt = startedAt

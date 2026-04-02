@@ -59,6 +59,12 @@ public enum DatabaseManager {
             }
         }
 
+        migrator.registerMigration("v3_session_cwd") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "cwd", .text)
+            }
+        }
+
         try migrator.migrate(db)
     }
 
