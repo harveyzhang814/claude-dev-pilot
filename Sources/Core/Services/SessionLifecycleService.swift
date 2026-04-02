@@ -91,6 +91,12 @@ public enum SessionLifecycleService {
                         sql: "UPDATE sessions SET status = 'busy' WHERE id = ?",
                         arguments: [event.sessionId]
                     )
+                    // User submitted a new prompt — auto-dismiss all prior notifications
+                    // for this session (they've implicitly acknowledged them by continuing)
+                    try db.execute(
+                        sql: "UPDATE events SET is_dismissed = 1 WHERE session_id = ? AND is_dismissed = 0",
+                        arguments: [event.sessionId]
+                    )
                 case .permissionNeeded:
                     try db.execute(
                         sql: "UPDATE sessions SET status = 'waiting' WHERE id = ?",

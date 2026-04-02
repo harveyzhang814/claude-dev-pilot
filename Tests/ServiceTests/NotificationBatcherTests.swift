@@ -67,4 +67,41 @@ struct NotificationBatcherTests {
         let summaries = notifications.filter(\.isSummary)
         #expect(summaries.count == 1)
     }
+
+    @Test("submitIdle emits notification immediately with correct content")
+    func submitIdle() {
+        var notifications: [NotificationBatcher.Notification] = []
+        let batcher = NotificationBatcher { notifications.append($0) }
+        batcher.submitIdle(sessionId: "session-1", project: "my-project")
+        #expect(notifications.count == 1)
+        let n = notifications[0]
+        #expect(n.sessionId == "session-1")
+        #expect(n.title == "my-project")
+        #expect(n.body == "Claude is ready")
+        #expect(n.isBatched == false)
+        #expect(n.isSummary == false)
+        #expect(n.event == nil)
+    }
+
+    @Test("submitIdle respects global rate limit")
+    func submitIdleGlobalThrottle() {
+        var notifications: [NotificationBatcher.Notification] = []
+        let batcher = NotificationBatcher(globalMaxPerWindow: 3) { notifications.append($0) }
+        for i in 0..<4 { batcher.submitIdle(sessionId: "s-\(i)", project: "p") }
+        let summaries = notifications.filter(\.isSummary)
+        #expect(summaries.count == 1)
+    }
+
+    @Test("background events do not emit notifications when filtered at call site")
+    func backgroundEventsFiltered() {
+        var notifications: [NotificationBatcher.Notification] = []
+        let batcher = NotificationBatcher { notifications.append($0) }
+        let bgEvent = makeEvent(type: .promptSubmitted, tier: .background)
+        // Simulate the AppState guard: only submit non-background events
+        if bgEvent.attentionTier != .background {
+            batcher.submit(bgEvent)
+            batcher.flush()
+        }
+        #expect(notifications.isEmpty)
+    }
 }

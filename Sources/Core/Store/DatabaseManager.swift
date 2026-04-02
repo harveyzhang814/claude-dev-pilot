@@ -80,6 +80,18 @@ public enum DatabaseManager {
             try db.execute(sql: "UPDATE sessions SET status = 'completed' WHERE status = 'error'")
         }
 
+        migrator.registerMigration("v6_event_types") { db in
+            // Migrate legacy event types removed in the idle/busy/waiting state machine redesign:
+            //   taskStarted   → promptSubmitted  (session became busy)
+            //   taskCompleted → agentStopped     (task ended cleanly)
+            //   taskError     → agentStopped     (task ended with error)
+            // Migrate legacy attention tiers:
+            //   review → background  (taskCompleted/taskError were review; now all non-action are background)
+            try db.execute(sql: "UPDATE events SET type = 'promptSubmitted' WHERE type = 'taskStarted'")
+            try db.execute(sql: "UPDATE events SET type = 'agentStopped' WHERE type IN ('taskCompleted', 'taskError')")
+            try db.execute(sql: "UPDATE events SET attention_tier = 'background' WHERE attention_tier = 'review'")
+        }
+
         try migrator.migrate(db)
     }
 

@@ -22,10 +22,16 @@ public actor StopWindowService {
     private var windows: [String: WindowEntry] = [:]
     private let windowDuration: TimeInterval
     private let db: any DatabaseWriter & Sendable
+    private let onIdleResolved: (@Sendable (String) -> Void)?
 
-    public init(db: any DatabaseWriter & Sendable, windowDuration: TimeInterval = 2.0) {
+    public init(
+        db: any DatabaseWriter & Sendable,
+        windowDuration: TimeInterval = 2.0,
+        onIdleResolved: (@Sendable (String) -> Void)? = nil
+    ) {
         self.db = db
         self.windowDuration = windowDuration
+        self.onIdleResolved = onIdleResolved
     }
 
     /// Called when a Stop hook arrives for a session.
@@ -70,6 +76,27 @@ public actor StopWindowService {
                     """,
                 arguments: [newStatus.rawValue, sessionId]
             )
+            if newStatus == .idle {
+                // Persist a review-tier event so the popover shows a green "ready" card
+                if let session = try DevSession.fetchOne(db, key: sessionId) {
+                    let event = DevEvent(
+                        id: UUID().uuidString,
+                        sessionId: sessionId,
+                        type: .agentStopped,
+                        title: "Claude is ready",
+                        detail: session.cwd,
+                        payload: "{}",
+                        tokenCount: nil,
+                        durationSeconds: nil,
+                        timestamp: Date(),
+                        attentionTier: .review
+                    )
+                    try event.insert(db)
+                }
+            }
+        }
+        if newStatus == .idle {
+            onIdleResolved?(sessionId)
         }
     }
 }

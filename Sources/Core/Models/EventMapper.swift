@@ -54,6 +54,7 @@ public enum EventMapper {
             return .action
         case .promptSubmitted, .agentStopped, .authSuccess:
             return .background
+        // .review is only assigned explicitly by StopWindowService, never inferred from hook payloads
         }
     }
 

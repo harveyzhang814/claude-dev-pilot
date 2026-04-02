@@ -287,4 +287,44 @@ struct SessionLifecycleTests {
         #expect(session?.tty == "/dev/ttys007")
         #expect(session?.terminalApp == "Apple_Terminal")
     }
+
+    @Test("promptSubmitted auto-dismisses all prior notifications for the session")
+    func promptSubmittedDismissesAllPriorNotifications() throws {
+        let db = try makeDB()
+        try db.write { db in
+            var s = DevSession(
+                id: "s1", project: "proj", cwd: "/p", tool: "claude-code",
+                status: .idle, startedAt: Date(), endedAt: nil,
+                totalTokens: nil, lastEventTitle: nil
+            )
+            try s.insert(db)
+            // A review-tier "ready" card
+            var readyCard = DevEvent(
+                id: "e-ready", sessionId: "s1", type: .agentStopped,
+                title: "Claude is ready", detail: "/p", payload: "{}",
+                tokenCount: nil, durationSeconds: nil,
+                timestamp: Date(), attentionTier: .review
+            )
+            try readyCard.insert(db)
+            // An action-tier permission card still undismissed
+            var permCard = DevEvent(
+                id: "e-perm", sessionId: "s1", type: .permissionNeeded,
+                title: "Allow bash", detail: "/p", payload: "{}",
+                tokenCount: nil, durationSeconds: nil,
+                timestamp: Date(), attentionTier: .action
+            )
+            try permCard.insert(db)
+        }
+
+        let event = makeEvent(sessionId: "s1", type: .promptSubmitted, tier: .background)
+        try SessionLifecycleService.processEvent(event, in: db)
+
+        let undismissed = try db.read { db in
+            try DevEvent
+                .filter(DevEvent.Columns.sessionId == "s1")
+                .filter(DevEvent.Columns.isDismissed == false)
+                .fetchCount(db)
+        }
+        #expect(undismissed == 0)
+    }
 }

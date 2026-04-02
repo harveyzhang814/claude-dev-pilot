@@ -117,7 +117,8 @@ struct EventCardView: View {
 
     private var tierColor: Color {
         switch event.attentionTier {
-        case .action: return .red
+        case .action:     return .red
+        case .review:     return Color(red: 0.4, green: 0.8, blue: 0.4)
         case .background: return .gray
         }
     }

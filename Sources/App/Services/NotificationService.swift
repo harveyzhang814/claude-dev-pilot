@@ -28,7 +28,10 @@ public final class NotificationService {
         content.title = notification.title
         content.body = notification.body
         content.categoryIdentifier = categoryIdentifier
-        if playSound && notification.event?.attentionTier == .action {
+        // Sound for: action-tier events (permission) and synthetic notifications (idle, event == nil)
+        let isActionTier = notification.event?.attentionTier == .action
+        let isSynthetic = notification.event == nil && !notification.isSummary
+        if playSound && (isActionTier || isSynthetic) {
             content.sound = .default
         }
         content.userInfo = [
