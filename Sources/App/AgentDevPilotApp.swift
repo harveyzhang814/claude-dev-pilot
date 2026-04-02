@@ -6,7 +6,6 @@ struct AgentDevPilotApp: App {
     @State private var appState: AppState = AppState()
 
     var body: some Scene {
-        // MenuBar Extra (popover style)
         MenuBarExtra {
             Group {
                 if appState.showOnboarding {
@@ -16,8 +15,8 @@ struct AgentDevPilotApp: App {
                 } else {
                     MenubarPopover(
                         viewModel: appState.popoverViewModel,
-                        onOpenTerminal: { path in
-                            openTerminal(at: path)
+                        onFocusSession: { session in
+                            focusSession(session)
                         }
                     )
                 }
@@ -29,27 +28,49 @@ struct AgentDevPilotApp: App {
             if appState.popoverViewModel.actionCount > 0 {
                 Image(systemName: "bell.badge.fill")
             } else {
-                Image(systemName: "bell")
+                Image(systemName: "bell.fill")
             }
         }
         .menuBarExtraStyle(.window)
 
-        // Session Panel window
         Window("Sessions", id: "session-panel") {
-            SessionPanelView(viewModel: appState.sessionPanelViewModel)
+            SessionPanelView(
+                viewModel: appState.sessionPanelViewModel,
+                onFocusSession: { session in
+                    focusSession(session)
+                }
+            )
         }
         .defaultSize(width: 400, height: 500)
 
-        // Settings scene
         Settings {
             SettingsView()
         }
     }
 }
 
+// MARK: - Terminal focus
+
+@MainActor
+private func focusSession(_ session: DevSession) {
+    let result = TerminalFocusService.focus(session: session)
+    guard result == .notFound else { return }
+
+    let alert = NSAlert()
+    alert.messageText = "Terminal window not found"
+    alert.informativeText = "The terminal running \"\(session.project)\" may have been closed. Open a new window instead?"
+    alert.addButton(withTitle: "Open New Window")
+    alert.addButton(withTitle: "Cancel")
+
+    if alert.runModal() == .alertFirstButtonReturn {
+        openTerminal(at: session.cwd ?? "", terminalApp: session.terminalApp)
+    }
+}
+
 // MARK: - Terminal helper
 
-private func openTerminal(at path: String) {
+/// Opens a new terminal window at `path`, using the correct terminal app if known.
+private func openTerminal(at path: String, terminalApp: String? = nil) {
     let url: URL
     if path.isEmpty {
         url = URL(fileURLWithPath: NSHomeDirectory())
@@ -61,8 +82,13 @@ private func openTerminal(at path: String) {
             url = URL(fileURLWithPath: path).deletingLastPathComponent()
         }
     }
+    let appName: String
+    switch terminalApp {
+    case "ghostty": appName = "Ghostty"
+    default: appName = "Terminal"
+    }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    process.arguments = ["-a", "Terminal", url.path]
+    process.arguments = ["-a", appName, url.path]
     try? process.run()
 }

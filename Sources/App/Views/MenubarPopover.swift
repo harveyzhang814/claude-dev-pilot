@@ -4,7 +4,7 @@ import Core
 struct MenubarPopover: View {
     @Environment(\.openWindow) private var openWindow
     let viewModel: PopoverViewModel
-    var onOpenTerminal: ((String) -> Void)?
+    var onFocusSession: ((DevSession) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,7 +38,7 @@ struct MenubarPopover: View {
                             SessionGroupView(
                                 session: session,
                                 events: viewModel.eventsBySession[session.id] ?? [],
-                                onOpenTerminal: onOpenTerminal
+                                onFocusSession: onFocusSession
                             ) { eventId in
                                 viewModel.dismiss(eventId: eventId)
                             }

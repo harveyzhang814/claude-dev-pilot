@@ -4,37 +4,49 @@ import Core
 struct SessionGroupView: View {
     let session: DevSession
     let events: [DevEvent]
-    var onOpenTerminal: ((String) -> Void)?
+    var onFocusSession: ((DevSession) -> Void)?
     var onDismiss: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Session header row
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(sessionStatusColor(session))
-                    .frame(width: 7, height: 7)
-                    .accessibilityHidden(true)
+            // Session header row — entire row is a tap target for terminal focus
+            Button {
+                onFocusSession?(session)
+            } label: {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(sessionStatusColor(session))
+                        .frame(width: 7, height: 7)
+                        .accessibilityHidden(true)
 
-                Text(session.project)
-                    .font(.callout)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
+                    Text(session.project)
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(1)
 
-                Text(sessionStatusTag(session))
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .foregroundColor(sessionStatusColor(session))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(sessionStatusColor(session).opacity(0.12))
-                    .clipShape(Capsule())
+                    Text(sessionStatusTag(session))
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(sessionStatusColor(session))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(sessionStatusColor(session).opacity(0.12))
+                        .clipShape(Capsule())
+
+                    Spacer()
+
+                    Text("↗")
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.3))
+                }
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, 12)
             .padding(.top, 9)
             .padding(.bottom, 5)
+            .accessibilityLabel("\(session.project), \(sessionStatusTag(session)), tap to focus terminal")
 
             if events.isEmpty {
                 Text("Working...")
@@ -47,8 +59,7 @@ struct SessionGroupView: View {
                 ForEach(events) { event in
                     EventCardView(
                         event: event,
-                        sessionLabel: nil,
-                        onOpenTerminal: onOpenTerminal
+                        sessionLabel: nil
                     ) {
                         onDismiss(event.id)
                     }
@@ -57,8 +68,7 @@ struct SessionGroupView: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(session.project), \(sessionStatusTag(session))")
+        .accessibilityElement(children: .contain)
     }
 }
 

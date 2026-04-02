@@ -9,6 +9,8 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     public let id: String
     public var project: String    // lastPathComponent of cwd
     public var cwd: String?       // full path (added v3)
+    public var tty: String?           // TTY device path, e.g. "/dev/ttys003"
+    public var terminalApp: String?   // "ghostty" or "Apple_Terminal"
     public var tool: String
     public var status: SessionStatus
     public var startedAt: Date
@@ -19,14 +21,18 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     public static let databaseTableName = "sessions"
 
     public enum Columns: String, ColumnExpression {
-        case id, project, cwd, tool, status
+        case id, project, cwd, tty
+        case terminalApp = "terminal_app"
+        case tool, status
         case startedAt = "started_at", endedAt = "ended_at"
         case totalTokens = "total_tokens"
         case lastEventTitle = "last_event_title"
     }
 
     public enum CodingKeys: String, CodingKey {
-        case id, project, cwd, tool, status
+        case id, project, cwd, tty
+        case terminalApp = "terminal_app"
+        case tool, status
         case startedAt = "started_at"
         case endedAt = "ended_at"
         case totalTokens = "total_tokens"
@@ -37,6 +43,8 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
         id: String,
         project: String,
         cwd: String? = nil,
+        tty: String? = nil,
+        terminalApp: String? = nil,
         tool: String,
         status: SessionStatus,
         startedAt: Date,
@@ -47,6 +55,8 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
         self.id = id
         self.project = project
         self.cwd = cwd
+        self.tty = tty
+        self.terminalApp = terminalApp
         self.tool = tool
         self.status = status
         self.startedAt = startedAt
