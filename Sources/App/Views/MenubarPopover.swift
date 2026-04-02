@@ -8,6 +8,21 @@ struct MenubarPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if viewModel.activeSessionCount > 0 {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 7, height: 7)
+                    Text("\(viewModel.activeSessionCount) active session\(viewModel.activeSessionCount == 1 ? "" : "s")")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 2)
+            }
+
             // Needs Attention section
             SectionHeader(title: "Needs Attention", count: viewModel.actionEvents.isEmpty ? nil : viewModel.actionEvents.count)
 
@@ -19,7 +34,13 @@ struct MenubarPopover: View {
                     .padding(.vertical, 8)
             } else {
                 ForEach(viewModel.actionEvents) { event in
-                    EventCardView(event: event, onOpenTerminal: onOpenTerminal) {
+                    EventCardView(
+                        event: event,
+                        sessionLabel: viewModel.activeSessionCount > 1
+                            ? viewModel.sessionStartedAt(for: event.sessionId).map { sessionAgeLabel($0) }
+                            : nil,
+                        onOpenTerminal: onOpenTerminal
+                    ) {
                         viewModel.dismiss(eventId: event.id)
                     }
                     .padding(.horizontal, 8)
@@ -41,7 +62,13 @@ struct MenubarPopover: View {
                     .padding(.vertical, 8)
             } else {
                 ForEach(viewModel.recentEvents.prefix(10)) { event in
-                    EventCardView(event: event, onOpenTerminal: onOpenTerminal) {
+                    EventCardView(
+                        event: event,
+                        sessionLabel: viewModel.activeSessionCount > 1
+                            ? viewModel.sessionStartedAt(for: event.sessionId).map { sessionAgeLabel($0) }
+                            : nil,
+                        onOpenTerminal: onOpenTerminal
+                    ) {
                         viewModel.dismiss(eventId: event.id)
                     }
                     .padding(.horizontal, 8)
@@ -73,6 +100,13 @@ struct MenubarPopover: View {
         .frame(width: 360)
         .background(Color(NSColor.windowBackgroundColor))
     }
+}
+
+private func sessionAgeLabel(_ date: Date) -> String {
+    let s = Int(-date.timeIntervalSinceNow)
+    if s < 60 { return "started just now" }
+    if s < 3600 { return "started \(s / 60)m ago" }
+    return "started \(s / 3600)h ago"
 }
 
 private struct SectionHeader: View {

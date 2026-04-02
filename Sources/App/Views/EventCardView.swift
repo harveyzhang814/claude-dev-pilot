@@ -3,6 +3,7 @@ import Core
 
 struct EventCardView: View {
     let event: DevEvent
+    var sessionLabel: String? = nil
     var onOpenTerminal: ((String) -> Void)?
     var onDismiss: (() -> Void)?
 
@@ -70,12 +71,23 @@ struct EventCardView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     // Project name — only shown when non-empty, truncated by SwiftUI
                     if !event.project.isEmpty {
-                        Text(event.project)
-                            .font(.caption2)
-                            .bold()
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        HStack(spacing: 4) {
+                            Text(event.project)
+                                .font(.caption2)
+                                .bold()
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            if let label = sessionLabel {
+                                Text("·")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                Text(label)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
 
                     // Event title
