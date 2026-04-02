@@ -88,9 +88,12 @@ public enum SessionLifecycleService {
                                    arguments: [tokens, event.sessionId])
                 }
             } else {
-                // Create new session
+                // Create new session (app started after session began; SessionStart was missed)
+                let cwd = event.detail
+                let project = cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "unknown"
                 var session = DevSession(
-                    id: event.sessionId, project: event.detail ?? "unknown",
+                    id: event.sessionId, project: project,
+                    cwd: cwd,
                     tool: "claude-code", status: .running, startedAt: Date(),
                     endedAt: nil, totalTokens: event.tokenCount, lastEventTitle: event.title
                 )
