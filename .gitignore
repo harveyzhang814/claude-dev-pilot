@@ -5,3 +5,5 @@ AgentDevPilot.app/
 xcuserdata/
 DerivedData/
 .DS_Store
+dist/
+.context/
