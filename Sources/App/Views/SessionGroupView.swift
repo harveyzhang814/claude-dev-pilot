@@ -10,44 +10,12 @@ struct SessionGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Session header row — entire row is a tap target for terminal focus
-            Button {
-                onFocusSession?(session)
-            } label: {
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(sessionStatusColor(session))
-                        .frame(width: 7, height: 7)
-                        .accessibilityHidden(true)
-
-                    Text(displayName)
-                        .font(.callout)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .layoutPriority(1)
-
-                    Text(sessionStatusTag(session))
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .foregroundColor(sessionStatusColor(session))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(sessionStatusColor(session).opacity(0.12))
-                        .clipShape(Capsule())
-
-                    Spacer()
-
-                    Text("↗")
-                        .font(.caption2)
-                        .foregroundColor(.secondary.opacity(0.3))
-                }
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.top, 9)
-            .padding(.bottom, 5)
-            .accessibilityLabel("\(displayName), \(sessionStatusTag(session)), tap to focus terminal")
+            SessionHeaderRow(
+                session: session,
+                displayName: displayName,
+                events: events,
+                onFocusSession: onFocusSession
+            )
 
             ForEach(events) { event in
                 EventCardView(
@@ -65,6 +33,109 @@ struct SessionGroupView: View {
         }
         .accessibilityElement(children: .contain)
     }
+}
+
+// MARK: - Session Header Row
+
+private struct SessionHeaderRow: View {
+    let session: DevSession
+    let displayName: String
+    let events: [DevEvent]
+    var onFocusSession: ((DevSession) -> Void)?
+
+    @State private var isHovered = false
+    @State private var pulseOpacity: Double = 1.0
+
+    private var rowBackground: Color {
+        switch session.status {
+        case .waiting:
+            return Color(red: 1, green: 0.271, blue: 0.227).opacity(0.09)
+        case .idle:
+            return Color(red: 1, green: 0.624, blue: 0.039).opacity(0.07)
+        case .busy, .stale, .completed:
+            return .clear
+        }
+    }
+
+    private var lastActivityDate: Date {
+        events.map(\.timestamp).max() ?? session.startedAt
+    }
+
+    var body: some View {
+        Button {
+            onFocusSession?(session)
+        } label: {
+            HStack(spacing: 8) {
+                // Status dot with pulse for waiting
+                ZStack {
+                    Circle()
+                        .fill(sessionStatusColor(session))
+                        .frame(width: 8, height: 8)
+
+                    if session.status == .waiting {
+                        Circle()
+                            .fill(sessionStatusColor(session))
+                            .frame(width: 8, height: 8)
+                            .opacity(pulseOpacity)
+                    }
+                }
+                .frame(width: 8, height: 8)
+
+                Text(displayName)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(sessionStatusTag(session))
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(sessionStatusColor(session))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(sessionStatusColor(session).opacity(0.12))
+                    .clipShape(Capsule())
+
+                Text(relativeTimeString(from: lastActivityDate))
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(NSColor.tertiaryLabelColor))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 38)
+            .background(
+                ZStack {
+                    rowBackground
+                    if isHovered { Color.white.opacity(0.04) }
+                }
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onAppear {
+            if session.status == .waiting {
+                withAnimation(
+                    .easeInOut(duration: 1.5).repeatForever(autoreverses: true)
+                ) {
+                    pulseOpacity = 0.3
+                }
+            }
+        }
+        .accessibilityLabel("\(displayName), \(sessionStatusTag(session)), tap to focus terminal")
+        .padding(.bottom, events.isEmpty ? 0 : 4)
+    }
+}
+
+// MARK: - Helpers
+
+private func relativeTimeString(from date: Date) -> String {
+    let seconds = Int(Date().timeIntervalSince(date))
+    if seconds < 60 { return "just now" }
+    let minutes = seconds / 60
+    if minutes < 60 { return "\(minutes)m" }
+    return "\(minutes / 60)h"
 }
 
 // Internal so tests can reach without crossing module boundary.

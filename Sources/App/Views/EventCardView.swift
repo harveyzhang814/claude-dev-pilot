@@ -6,53 +6,7 @@ struct EventCardView: View {
     var sessionLabel: String? = nil
     var onDismiss: (() -> Void)?
 
-    @State private var dragOffset: CGFloat = 0
-    @State private var isDismissing = false
-
     var body: some View {
-        ZStack(alignment: .trailing) {
-            // Red "Done" background revealed on swipe
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.red)
-                .overlay(
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.white)
-                        .padding(.trailing, 16),
-                    alignment: .trailing
-                )
-
-            cardContent
-                .offset(x: dragOffset)
-                .gesture(
-                    DragGesture(minimumDistance: 10, coordinateSpace: .local)
-                        .onChanged { value in
-                            guard !isDismissing else { return }
-                            // Only allow leftward drag
-                            let x = min(0, value.translation.width)
-                            dragOffset = x
-                        }
-                        .onEnded { value in
-                            guard !isDismissing else { return }
-                            if value.translation.width < -80 {
-                                // Commit dismiss
-                                isDismissing = true
-                                withAnimation(.easeIn(duration: 0.2)) {
-                                    dragOffset = -360
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                    onDismiss?()
-                                }
-                            } else {
-                                withAnimation(.spring(response: 0.3)) {
-                                    dragOffset = 0
-                                }
-                            }
-                        }
-                )
-        }
-    }
-
-    private var cardContent: some View {
         HStack(spacing: 0) {
             // Status color bar (3px)
             Rectangle()
@@ -93,8 +47,6 @@ struct EventCardView: View {
                     Text(event.title)
                         .font(.callout)
                         .lineLimit(2)
-
-
                 }
 
                 Spacer()
