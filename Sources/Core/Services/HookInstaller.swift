@@ -67,32 +67,39 @@ public enum HookInstaller {
 
     /// Returns a prompt the user can paste into Claude Code.
     /// Claude Code will use its own update-config skill + permission system
-    /// to safely add the Notification hook to ~/.claude/settings.json.
+    /// to safely add the Notification, SessionStart, and SessionEnd hooks
+    /// to ~/.claude/settings.json.
     public static func claudeCodePrompt() -> String {
         """
-        Please add a Notification hook to my Claude Code settings \
-        (~/.claude/settings.json) for Agent Dev Pilot.
+        Please add Notification, SessionStart, and SessionEnd hooks to my Claude Code \
+        settings (~/.claude/settings.json) for Agent Dev Pilot.
 
-        The hook should run `~/.agent-dev-pilot/hooks/notify.sh` on every \
-        Notification event (empty matcher = all notifications).
+        All three hooks should run `~/.agent-dev-pilot/hooks/notify.sh`.
 
         Target JSON to merge under the "hooks" key:
         {
           "Notification": [
             {
               "matcher": "",
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "~/.agent-dev-pilot/hooks/notify.sh"
-                }
-              ]
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+            }
+          ],
+          "SessionStart": [
+            {
+              "matcher": "",
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+            }
+          ],
+          "SessionEnd": [
+            {
+              "matcher": "",
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
             }
           ]
         }
 
         Rules:
-        - Only add the entry if it does not already exist.
+        - Only add entries that do not already exist.
         - Preserve all existing hooks and permissions exactly as-is.
         - Do not modify any other keys in settings.json.
         """
