@@ -227,6 +227,34 @@ struct SessionLifecycleTests {
         #expect(session?.terminalApp == "ghostty")
     }
 
+    @Test("SessionStart on already-running session updates tty")
+    func sessionStartOnRunningUpdatedTty() throws {
+        let db = try makeDB()
+        // Pre-insert a running session with an old tty
+        try db.write { db in
+            var s = DevSession(
+                id: "running-tty", project: "myapp", cwd: "/Users/dev/myapp",
+                tty: "/dev/ttys001", terminalApp: "ghostty",
+                tool: "claude-code", status: .running,
+                startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil
+            )
+            try s.insert(db)
+        }
+        // New SessionStart with updated tty (Claude Code restarted)
+        let payload = HookPayload(
+            sessionId: "running-tty",
+            cwd: "/Users/dev/myapp",
+            hookEventName: "SessionStart",
+            tty: "/dev/ttys009",
+            terminalApp: "ghostty"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "running-tty") }
+        #expect(session?.status == .running)   // status unchanged
+        #expect(session?.tty == "/dev/ttys009")  // tty updated
+    }
+
     @Test("SessionStart updates tty and terminalApp on reopen")
     func sessionStartUpdatesTtyOnReopen() throws {
         let db = try makeDB()

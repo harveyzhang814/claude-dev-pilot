@@ -14,14 +14,19 @@ public enum SessionLifecycleService {
             switch payload.hookEventName {
             case "SessionStart":
                 if let session = existing {
-                    // Reopen if closed; always update cwd, tty, and terminalApp
+                    // Always refresh location/terminal info in case Claude Code restarted
+                    try db.execute(
+                        sql: "UPDATE sessions SET cwd = ?, tty = ?, terminal_app = ? WHERE id = ?",
+                        arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.sessionId]
+                    )
+                    // If closed, also reset status and clear ended_at
                     if session.status == .completed || session.status == .error || session.status == .stale {
                         try db.execute(
-                            sql: "UPDATE sessions SET status = 'running', ended_at = NULL, cwd = ?, tty = ?, terminal_app = ? WHERE id = ?",
-                            arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.sessionId]
+                            sql: "UPDATE sessions SET status = 'running', ended_at = NULL WHERE id = ?",
+                            arguments: [payload.sessionId]
                         )
                     }
-                    // If already running/waiting: no-op (idempotent)
+                    // If already running/waiting: cwd/tty/terminalApp updated above, status unchanged
                 } else {
                     var session = DevSession(
                         id: payload.sessionId,
