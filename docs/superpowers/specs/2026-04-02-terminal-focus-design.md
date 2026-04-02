@@ -26,8 +26,7 @@ Current behavior: "Open Terminal" button on `EventCardView` calls `open -a Termi
 - In-app terminal preview
 - Automatic focus on notification tap
 
-**Prerequisites:**
-- Session-grouped UI spec (`2026-04-02-menubar-session-grouped-ui.md`) must be implemented first — `SessionGroupView.swift` is created there; this spec modifies it.
+**Prerequisites:** None — session-grouped UI (`SessionGroupView`, `MenubarPopover` with `activeSessions`, `PopoverViewModel`) is already fully implemented.
 
 ---
 
@@ -139,9 +138,9 @@ public enum FocusResult { case success, notFound }
 
 ### UI layer
 
-**`SessionGroupView`** — header row becomes a `Button` wrapping the entire HStack. Status text → capsule. `↗` label appended (opacity 0.2).
+**`SessionGroupView`** — status capsule already exists. Changes needed: header row becomes a `Button` wrapping the entire HStack; replace `onOpenTerminal` param with `onFocusSession: (DevSession) -> Void`; append `↗` hint (opacity 0.2) to header HStack.
 
-**`SessionRowView`** — same pattern. Existing "Open Terminal" button (if any) removed.
+**`SessionRowView`** — currently uses icon-based status indicators (circle/triangle). Redesign: replace icon with status capsule (same colors/style as `SessionGroupView`); wrap entire row in `Button`; add `onFocusSession` closure param; append `↗` hint.
 
 **`EventCardView`** — remove the `if event.attentionTier == .action || event.type == .taskError` button block.
 
