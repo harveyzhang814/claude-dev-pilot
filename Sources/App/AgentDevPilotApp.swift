@@ -12,6 +12,8 @@ struct AgentDevPilotApp: App {
                     OnboardingView {
                         appState.completeOnboarding()
                     }
+                } else if appState.floatWindowMode {
+                    FloatWindowMenubarTap(appState: appState)
                 } else {
                     MenubarPopover(
                         viewModel: appState.popoverViewModel,
@@ -33,6 +35,9 @@ struct AgentDevPilotApp: App {
             // visible in the menu bar, so this task fires immediately without
             // requiring the user to click the icon first.
             .task {
+                // Register focus handler before start() so FloatWindowController
+                // receives it when floatWindowMode is restored.
+                appState.focusSessionHandler = { session in focusSession(session) }
                 await appState.start()
             }
         }
@@ -49,8 +54,26 @@ struct AgentDevPilotApp: App {
         .defaultSize(width: 400, height: 500)
 
         Settings {
-            SettingsView()
+            SettingsView(appState: appState)
         }
+    }
+}
+
+// MARK: - Float Window menubar tap
+
+/// In Float Window mode, tapping the menubar icon toggles the float window's
+/// expanded state. This view closes the MenuBarExtra popup immediately.
+private struct FloatWindowMenubarTap: View {
+    let appState: AppState
+
+    var body: some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .onAppear {
+                appState.toggleFloatWindowExpanded()
+                // Close the MenuBarExtra popup that just opened
+                NSApplication.shared.keyWindow?.orderOut(nil)
+            }
     }
 }
 
