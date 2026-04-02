@@ -13,9 +13,12 @@ struct GhosttyFocuser: TerminalFocuser {
             repeat with w in every window
                 repeat with t in every tab of w
                     set wd to working directory of (focused terminal of t)
+                    -- Ghostty appends a trailing slash; normalize before comparing
+                    if wd ends with "/" then set wd to text 1 thru -2 of wd
                     if wd is equal to "\(escapedCwd)" then
                         select tab t
                         activate window w
+                        activate
                         set matchCount to 1
                         exit repeat
                     end if

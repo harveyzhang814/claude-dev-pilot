@@ -18,6 +18,8 @@
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Agent Dev Pilot needs to control Ghostty to focus the terminal window for your active Claude Code session.</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSPrincipalClass</key>
