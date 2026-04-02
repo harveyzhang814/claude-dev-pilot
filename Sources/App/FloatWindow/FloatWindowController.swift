@@ -131,9 +131,8 @@ final class FloatWindowController: NSObject {
     }
 
     private func positionPanel(height: CGFloat, animated: Bool) {
-        // Use the screen that contains the menu bar (maxY == frame.maxY), not just NSScreen.main,
-        // so the panel appears on the correct display in multi-monitor setups.
-        let screen = NSScreen.screens.first(where: { $0.visibleFrame.maxY == $0.frame.maxY }) ?? NSScreen.main
+        // NSScreen.screens.first is always the screen containing the menu bar (per Apple docs).
+        let screen = NSScreen.screens.first ?? NSScreen.main
         guard let screen else { return }
         let visible = screen.visibleFrame
         let x = screen.frame.midX - 180
