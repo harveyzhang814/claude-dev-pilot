@@ -48,24 +48,15 @@ struct SessionGroupView: View {
             .padding(.bottom, 5)
             .accessibilityLabel("\(session.project), \(sessionStatusTag(session)), tap to focus terminal")
 
-            if events.isEmpty {
-                Text("Working...")
-                    .font(.caption)
-                    .italic()
-                    .foregroundColor(.secondary.opacity(0.5))
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
-            } else {
-                ForEach(events) { event in
-                    EventCardView(
-                        event: event,
-                        sessionLabel: nil
-                    ) {
-                        onDismiss(event.id)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 4)
+            ForEach(events) { event in
+                EventCardView(
+                    event: event,
+                    sessionLabel: nil
+                ) {
+                    onDismiss(event.id)
                 }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
             }
         }
         .accessibilityElement(children: .contain)
