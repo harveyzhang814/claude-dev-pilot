@@ -63,28 +63,31 @@ Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
 | `DevSession` | Core/Models | Session grouping events by `session_id` |
 | `EventMapper` | Core/Models | Maps `HookPayload` → `DevEvent`, infers `EventType` and `AttentionTier` |
 | `DatabaseManager` | Core/Store | Opens GRDB `DatabasePool`, runs migrations |
-| `EventStore` / `SessionStore` | Core/Store | CRUD + pruning. Always use typed GRDB queries, never raw SQL for updates |
+| `EventStore` / `SessionStore` | Core/Store | CRUD + pruning. `EventStore.fetchGroupedBySession(sessionIds:limit:in:)` fetches ≤5 undismissed non-background events per session. Always use typed GRDB queries, never raw SQL for updates |
 | `SessionLifecycleService` | Core/Services | Session state machine: running/waiting/completed/error/stale |
 | `NotificationBatcher` | Core/Services | Per-session batching (>3 events/2s) + global throttle (5/10s) |
 | `AuthTokenService` | Core/Services | Generates and persists a 32-byte hex token at `~/.agent-dev-pilot/token` (0600) |
 | `EventServer` | Server | Hummingbird app builder. `buildApp()` for tests, `start()` for production |
 | `AuthMiddleware` | Server | Bearer token validation. `/health` bypasses auth |
 | `AppState` | App | `@Observable` root object. Owns DB, server task, batcher, stale timer |
-| `PopoverViewModel` | App/ViewModels | GRDB `ValueObservation` for undismissed events, `actionEvents` + `recentEvents` |
+| `PopoverViewModel` | App/ViewModels | Single atomic `ValueObservation` populates `activeSessions: [DevSession]` (running+waiting, startedAt desc) and `eventsBySession: [String: [DevEvent]]` together. Also keeps `activeSessionCount`/`sessionStartTimes` for backward compat. `actionEvents`/`recentEvents` exist but have no active consumers |
+| `SessionGroupView` | App/Views | Renders one session group: header row (status dot + project name + capsule tag) + `EventCardView` list or "Working..." placeholder. `sessionStatusTag`/`sessionStatusColor` are internal free functions (not private, accessible via `@testable`) |
+| `MenubarPopover` | App/Views | Session-grouped popover: `ForEach(activeSessions)` → `SessionGroupView` with dividers; empty state shows `terminal` SF symbol |
 
 ### AttentionTier
 
 | Tier | EventType | UI behavior |
 |------|-----------|-------------|
-| `.action` | `permissionNeeded` | Red badge, native notification |
-| `.review` | `taskCompleted`, `taskError` | Popover list, gray badge |
-| `.background` | `taskStarted` | Session panel only |
+| `.action` | `permissionNeeded` | Red bar in popover, native notification |
+| `.review` | `taskCompleted`, `taskError` | Green/gray bar in popover |
+| `.background` | `taskStarted` | Session panel only; excluded from popover |
 
 ### Database
 
 - SQLite via GRDB, WAL mode, stored at `~/Library/Application Support/AgentDevPilot/db.sqlite`
 - Migrations: `v1_initial` (sessions + events tables + indexes), `v2_dismissed` (adds `is_dismissed` to events)
 - Tests use in-memory DB via `DatabaseManager.openInMemoryDatabase()`
+- `ValueObservation` closures must always read every table they need to track — an early-return guard that skips a table read will cause that table to be unregistered from the observation
 
 ### Auth
 
