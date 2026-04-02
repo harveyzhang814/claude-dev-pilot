@@ -173,6 +173,7 @@ public final class AppState {
         let days = UserDefaults.standard.integer(forKey: "retentionDays")
         let retentionDays = days > 0 ? days : 30
         try? EventStore.pruneOlderThan(days: retentionDays, in: db)
+        try? HookLogStore.pruneOlderThan(days: retentionDays, in: db)
     }
 
     public func completeOnboarding() {
