@@ -5,93 +5,87 @@ import Foundation
 @Suite("EventMapper")
 struct EventMapperTests {
 
-    // MARK: - notification_type → EventType
+    // MARK: - Notification hook routing
 
-    @Test("permission_prompt → permissionNeeded")
+    @Test("permission_prompt → permissionNeeded + action")
     func permissionPrompt() throws {
-        let payload = makePayload(notificationType: "permission_prompt", message: "Tool use requires approval")
+        let payload = makePayload(hookEventName: "Notification", notificationType: "permission_prompt")
         let event = EventMapper.map(payload)
         #expect(event.type == .permissionNeeded)
         #expect(event.attentionTier == .action)
     }
 
-    @Test("elicitation_dialog → permissionNeeded")
+    @Test("elicitation_dialog → permissionNeeded + action")
     func elicitationDialog() throws {
-        let payload = makePayload(notificationType: "elicitation_dialog", message: "MCP server needs input")
+        let payload = makePayload(hookEventName: "Notification", notificationType: "elicitation_dialog")
         let event = EventMapper.map(payload)
         #expect(event.type == .permissionNeeded)
         #expect(event.attentionTier == .action)
     }
 
-    @Test("idle_prompt → taskCompleted")
+    @Test("idle_prompt → agentStopped + background")
     func idlePrompt() throws {
-        let payload = makePayload(notificationType: "idle_prompt", message: "Claude is ready for your next request")
+        let payload = makePayload(hookEventName: "Notification", notificationType: "idle_prompt")
         let event = EventMapper.map(payload)
-        #expect(event.type == .taskCompleted)
-        #expect(event.attentionTier == .review)
-    }
-
-    @Test("auth_success → taskStarted (background)")
-    func authSuccess() throws {
-        let payload = makePayload(notificationType: "auth_success", message: "Successfully authenticated")
-        let event = EventMapper.map(payload)
-        #expect(event.type == .taskStarted)
+        #expect(event.type == .agentStopped)
         #expect(event.attentionTier == .background)
     }
 
-    // MARK: - Text matching fallback
-
-    @Test("Message with 'error' and no notification_type → taskError")
-    func errorFallback() throws {
-        let payload = makePayload(notificationType: nil, message: "Build failed with error")
+    @Test("auth_success → authSuccess + background")
+    func authSuccess() throws {
+        let payload = makePayload(hookEventName: "Notification", notificationType: "auth_success")
         let event = EventMapper.map(payload)
-        #expect(event.type == .taskError)
-        #expect(event.attentionTier == .review)
+        #expect(event.type == .authSuccess)
+        #expect(event.attentionTier == .background)
     }
 
-    @Test("Message with 'permission' and no notification_type → permissionNeeded")
-    func permissionFallback() throws {
-        let payload = makePayload(notificationType: nil, message: "Permission required to write file")
+    @Test("Notification with unknown type → agentStopped + background")
+    func unknownNotificationType() throws {
+        let payload = makePayload(hookEventName: "Notification", notificationType: nil)
         let event = EventMapper.map(payload)
-        #expect(event.type == .permissionNeeded)
-        #expect(event.attentionTier == .action)
+        #expect(event.type == .agentStopped)
+        #expect(event.attentionTier == .background)
     }
 
-    @Test("Message with 'completed' and no notification_type → taskCompleted")
-    func completedFallback() throws {
-        let payload = makePayload(notificationType: nil, message: "Task completed successfully")
+    // MARK: - Non-Notification hook routing
+
+    @Test("UserPromptSubmit → promptSubmitted + background")
+    func userPromptSubmit() throws {
+        let payload = makePayload(hookEventName: "UserPromptSubmit")
         let event = EventMapper.map(payload)
-        #expect(event.type == .taskCompleted)
-        #expect(event.attentionTier == .review)
+        #expect(event.type == .promptSubmitted)
+        #expect(event.attentionTier == .background)
     }
 
-    @Test("No pattern match → taskCompleted (safe default)")
-    func noMatchFallback() throws {
-        let payload = makePayload(notificationType: nil, message: "Something happened")
+    @Test("Stop → agentStopped + background")
+    func stop() throws {
+        let payload = makePayload(hookEventName: "Stop")
         let event = EventMapper.map(payload)
-        #expect(event.type == .taskCompleted)
-        #expect(event.attentionTier == .review)
+        #expect(event.type == .agentStopped)
+        #expect(event.attentionTier == .background)
     }
 
-    @Test("Multiple keywords: 'completed with error' → error wins (higher priority)")
-    func multipleKeywords() throws {
-        let payload = makePayload(notificationType: nil, message: "Task completed with error")
+    @Test("Unknown hookEventName → agentStopped + background")
+    func unknownHookEventName() throws {
+        let payload = makePayload(hookEventName: "SomeFutureHook")
         let event = EventMapper.map(payload)
-        #expect(event.type == .taskError)
+        #expect(event.type == .agentStopped)
+        #expect(event.attentionTier == .background)
     }
 
     // MARK: - Field mapping
 
     @Test("Session ID carried through from payload")
     func sessionIdPassthrough() throws {
-        let payload = makePayload(notificationType: "idle_prompt", message: "Done", sessionId: "test-session-42")
+        let payload = makePayload(hookEventName: "Notification", notificationType: "idle_prompt",
+                                  sessionId: "test-session-42")
         let event = EventMapper.map(payload)
         #expect(event.sessionId == "test-session-42")
     }
 
     @Test("Raw payload stored as JSON string")
     func rawPayloadStored() throws {
-        let payload = makePayload(notificationType: "idle_prompt", message: "Done")
+        let payload = makePayload(hookEventName: "Notification", notificationType: "idle_prompt")
         let event = EventMapper.map(payload)
         #expect(event.payload.contains("idle_prompt"))
     }
@@ -99,6 +93,7 @@ struct EventMapperTests {
     // MARK: - Helpers
 
     private func makePayload(
+        hookEventName: String,
         notificationType: String? = nil,
         message: String = "test",
         cwd: String = "/Users/dev/project",
@@ -107,7 +102,7 @@ struct EventMapperTests {
         HookPayload(
             sessionId: sessionId,
             cwd: cwd,
-            hookEventName: "Notification",
+            hookEventName: hookEventName,
             message: message,
             transcriptPath: nil,
             title: nil,

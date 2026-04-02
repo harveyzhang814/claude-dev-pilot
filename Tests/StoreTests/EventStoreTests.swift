@@ -15,7 +15,7 @@ struct EventStoreTests {
     private func makeSession(id: String = "session-1") -> DevSession {
         DevSession(
             id: id, project: "/Users/dev/project",
-            tool: "claude-code", status: .running,
+            tool: "claude-code", status: .idle,
             startedAt: Date(), endedAt: nil,
             totalTokens: nil, lastEventTitle: nil
         )
@@ -24,8 +24,8 @@ struct EventStoreTests {
     private func makeEvent(
         id: String = UUID().uuidString,
         sessionId: String = "session-1",
-        type: EventType = .taskCompleted,
-        tier: AttentionTier = .review,
+        type: EventType = .agentStopped,
+        tier: AttentionTier = .background,
         timestamp: Date = Date()
     ) -> DevEvent {
         DevEvent(
@@ -107,7 +107,7 @@ struct EventStoreTests {
 
         let actionEvent1 = makeEvent(id: "a1", type: .permissionNeeded, tier: .action)
         let actionEvent2 = makeEvent(id: "a2", type: .permissionNeeded, tier: .action)
-        let reviewEvent = makeEvent(id: "r1", type: .taskCompleted, tier: .review)
+        let reviewEvent = makeEvent(id: "r1", type: .agentStopped, tier: .background)
 
         try EventStore.insert(actionEvent1, in: db)
         try EventStore.insert(actionEvent2, in: db)

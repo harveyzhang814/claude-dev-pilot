@@ -72,6 +72,14 @@ public enum DatabaseManager {
             }
         }
 
+        migrator.registerMigration("v5_session_status") { db in
+            // Migrate status values to new state machine:
+            //   running → idle  (we don't know if it was actually busy; idle is safe)
+            //   error   → completed  (terminal state, merge into completed)
+            try db.execute(sql: "UPDATE sessions SET status = 'idle' WHERE status = 'running'")
+            try db.execute(sql: "UPDATE sessions SET status = 'completed' WHERE status = 'error'")
+        }
+
         try migrator.migrate(db)
     }
 

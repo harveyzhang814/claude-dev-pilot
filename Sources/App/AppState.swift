@@ -93,6 +93,7 @@ public final class AppState {
         let port = UserDefaults.standard.integer(forKey: "serverPort")
         let resolvedPort = port > 0 ? port : 9876
         let batcher = self.batcher
+        let stopWindow = StopWindowService(db: dbPool)
 
         serverTask = Task.detached(priority: .background) {
             do {
@@ -100,6 +101,7 @@ public final class AppState {
                     db: dbPool,
                     authToken: token,
                     port: resolvedPort,
+                    stopWindow: stopWindow,
                     onEvent: { event in
                         batcher?.submit(event)
                         batcher?.flush()

@@ -76,19 +76,21 @@ struct SessionGroupView: View {
 func sessionStatusTag(_ session: DevSession) -> String {
     switch session.status {
     case .waiting: return "needs input"
-    case .running: return "running"
+    case .busy:    return "busy"
+    case .idle:    return "idle"
     default:
         assertionFailure("SessionGroupView received unexpected status: \(session.status)")
-        return "running"
+        return "idle"
     }
 }
 
 func sessionStatusColor(_ session: DevSession) -> Color {
     switch session.status {
-    case .waiting: return Color(red: 1.0, green: 0.271, blue: 0.227)  // #FF453A
-    case .running: return Color(red: 1.0, green: 0.624, blue: 0.039)  // #FF9F0A
+    case .waiting: return Color(red: 1.0, green: 0.271, blue: 0.227)  // #FF453A red
+    case .busy:    return Color(red: 1.0, green: 0.624, blue: 0.039)  // #FF9F0A orange
+    case .idle:    return Color(red: 0.4, green: 0.8,   blue: 0.4)    // muted green
     default:
         assertionFailure("SessionGroupView received unexpected status: \(session.status)")
-        return Color(red: 1.0, green: 0.624, blue: 0.039)
+        return Color(red: 0.4, green: 0.8, blue: 0.4)
     }
 }

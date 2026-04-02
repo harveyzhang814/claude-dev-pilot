@@ -2,16 +2,15 @@ import Foundation
 import GRDB
 
 public enum EventType: String, Codable, Sendable, DatabaseValueConvertible {
-    case taskCompleted
-    case permissionNeeded
-    case taskError
-    case taskStarted
+    case promptSubmitted   // UserPromptSubmit hook → session goes busy
+    case permissionNeeded  // permission_prompt / elicitation_dialog → session goes waiting
+    case agentStopped      // Stop hook or idle_prompt → window resolves to idle/waiting
+    case authSuccess       // auth_success notification → no state change
 }
 
 public enum AttentionTier: String, Codable, Sendable, DatabaseValueConvertible {
     case action      // permissionNeeded → red badge, native notification
-    case review      // taskCompleted, taskError → popover list, gray badge
-    case background  // taskStarted → session panel only
+    case background  // all others → session panel only, no popover card
 }
 
 public struct DevEvent: Codable, Identifiable, Sendable, FetchableRecord, PersistableRecord {

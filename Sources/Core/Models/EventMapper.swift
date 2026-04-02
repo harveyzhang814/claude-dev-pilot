@@ -24,44 +24,26 @@ public enum EventMapper {
 
     // MARK: - EventType Inference
 
-    /// Priority: notification_type (deterministic) > text matching (fallback) > .taskCompleted (safe default)
+    /// Driven by hookEventName first, then notification_type for Notification hooks.
     public static func inferEventType(_ payload: HookPayload) -> EventType {
-        if let notifType = payload.notificationType {
-            switch notifType {
+        switch payload.hookEventName {
+        case "UserPromptSubmit":
+            return .promptSubmitted
+        case "Stop":
+            return .agentStopped
+        case "Notification":
+            switch payload.notificationType {
             case "permission_prompt", "elicitation_dialog":
                 return .permissionNeeded
-            case "idle_prompt":
-                return inferFromMessage(payload.message) ?? .taskCompleted
             case "auth_success":
-                return .taskStarted
+                return .authSuccess
             default:
-                break
+                // idle_prompt and unknown types: treat as agentStopped (enters stop window)
+                return .agentStopped
             }
+        default:
+            return .agentStopped
         }
-
-        return inferFromMessage(payload.message) ?? .taskCompleted
-    }
-
-    /// Text-match priority: error > permission > completed.
-    private static func inferFromMessage(_ message: String) -> EventType? {
-        let lowered = message.lowercased()
-
-        let errorPatterns = ["error", "failed", "failure"]
-        if errorPatterns.contains(where: { lowered.contains($0) }) {
-            return .taskError
-        }
-
-        let permissionPatterns = ["permission", "approve", "allow"]
-        if permissionPatterns.contains(where: { lowered.contains($0) }) {
-            return .permissionNeeded
-        }
-
-        let completionPatterns = ["completed", "finished", "done"]
-        if completionPatterns.contains(where: { lowered.contains($0) }) {
-            return .taskCompleted
-        }
-
-        return nil
     }
 
     // MARK: - AttentionTier
@@ -70,9 +52,7 @@ public enum EventMapper {
         switch eventType {
         case .permissionNeeded:
             return .action
-        case .taskCompleted, .taskError:
-            return .review
-        case .taskStarted:
+        case .promptSubmitted, .agentStopped, .authSuccess:
             return .background
         }
     }

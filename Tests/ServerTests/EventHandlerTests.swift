@@ -15,7 +15,8 @@ struct EventHandlerTests {
 
     private func makeApp(authToken: String = "test-token") throws -> (some ApplicationProtocol, any DatabaseWriter & Sendable) {
         let db = try DatabaseManager.openInMemoryDatabase()
-        let app = EventServer.buildApp(db: db, authToken: authToken) { _ in }
+        let stopWindow = StopWindowService(db: db)
+        let app = EventServer.buildApp(db: db, authToken: authToken, stopWindow: stopWindow) { _ in }
         return (app, db)
     }
 
@@ -106,7 +107,7 @@ struct EventHandlerTests {
         }
     }
 
-    @Test("POST /event with SessionStart returns 200, no DevEvent, session created with status running")
+    @Test("POST /event with SessionStart returns 200, no DevEvent, session created with status idle")
     func postEventSessionStart() async throws {
         let (app, db) = try makeApp()
         try await app.test(.router) { client in
@@ -131,7 +132,7 @@ struct EventHandlerTests {
 
             let session = try await db.read { try DevSession.fetchOne($0, key: "sess-start-001") }
             #expect(session != nil, "SessionStart must create a DevSession")
-            #expect(session?.status == .running, "Session status must be running after SessionStart")
+            #expect(session?.status == .idle, "Session status must be idle after SessionStart")
         }
     }
 
@@ -139,14 +140,14 @@ struct EventHandlerTests {
     func postEventSessionEnd() async throws {
         let (app, db) = try makeApp()
 
-        // Pre-create a running session so SessionEnd has something to close
+        // Pre-create an idle session so SessionEnd has something to close
         try await db.write { db in
             var session = DevSession(
                 id: "sess-end-001",
                 project: "myproject",
                 cwd: "/Users/test/myproject",
                 tool: "claude-code",
-                status: .running,
+                status: .idle,
                 startedAt: Date(),
                 endedAt: nil,
                 totalTokens: nil,

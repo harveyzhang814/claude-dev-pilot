@@ -6,7 +6,7 @@ struct SessionRowView: View {
     var onFocusSession: ((DevSession) -> Void)?
 
     private var isActive: Bool {
-        session.status == .running || session.status == .waiting
+        session.status == .idle || session.status == .busy || session.status == .waiting
     }
 
     var body: some View {
@@ -84,15 +84,11 @@ struct SessionRowView: View {
     @ViewBuilder
     private var statusIndicator: some View {
         switch session.status {
-        case .running, .waiting:
+        case .idle, .busy, .waiting:
             EmptyView()  // handled by capsule branch above
         case .completed:
             Image(systemName: "checkmark")
                 .foregroundColor(.blue)
-                .imageScale(.small)
-        case .error:
-            Image(systemName: "xmark")
-                .foregroundColor(.red)
                 .imageScale(.small)
         case .stale:
             Rectangle()
@@ -103,10 +99,10 @@ struct SessionRowView: View {
 
     private var statusLabel: String {
         switch session.status {
-        case .running: return "Running"
+        case .idle: return "Idle"
+        case .busy: return "Busy"
         case .waiting: return "Waiting for permission"
         case .completed: return "Completed"
-        case .error: return "Error"
         case .stale: return "Stale"
         }
     }

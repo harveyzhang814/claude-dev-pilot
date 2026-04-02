@@ -2,7 +2,11 @@ import Foundation
 import GRDB
 
 public enum SessionStatus: String, Codable, Sendable, DatabaseValueConvertible {
-    case running, waiting, completed, error, stale
+    case idle       // active session, no task running
+    case busy       // Claude is executing (UserPromptSubmit received)
+    case waiting    // needs user intervention
+    case completed  // session ended via SessionEnd hook
+    case stale      // inactive too long (no activity for 30 min)
 }
 
 public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, MutablePersistableRecord {

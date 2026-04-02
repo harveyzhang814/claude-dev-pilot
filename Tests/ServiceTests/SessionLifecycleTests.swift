@@ -14,8 +14,8 @@ struct SessionLifecycleTests {
 
     private func makeEvent(
         sessionId: String = "session-1",
-        type: EventType = .taskCompleted,
-        tier: AttentionTier = .review,
+        type: EventType = .agentStopped,
+        tier: AttentionTier = .background,
         cwd: String = "/Users/dev/project"
     ) -> DevEvent {
         DevEvent(
@@ -26,16 +26,30 @@ struct SessionLifecycleTests {
         )
     }
 
-    @Test("First event creates new session as running")
+    @Test("First event creates new session as idle")
     func firstEventCreatesSession() throws {
         let db = try makeDB()
-        let event = makeEvent(type: .taskStarted)
+        let event = makeEvent(type: .agentStopped)
         try SessionLifecycleService.processEvent(event, in: db)
 
         let session = try SessionStore.fetch(id: event.sessionId, in: db)
         #expect(session != nil)
-        #expect(session?.status == .running)
+        #expect(session?.status == .idle)
         #expect(session?.id == event.sessionId)
+    }
+
+    @Test("promptSubmitted event sets status to busy")
+    func promptSubmittedSetsBusy() throws {
+        let db = try makeDB()
+        // Create session first
+        let firstEvent = makeEvent(type: .agentStopped)
+        try SessionLifecycleService.processEvent(firstEvent, in: db)
+
+        let event = makeEvent(type: .promptSubmitted, tier: .background)
+        try SessionLifecycleService.processEvent(event, in: db)
+
+        let session = try SessionStore.fetch(id: event.sessionId, in: db)
+        #expect(session?.status == .busy)
     }
 
     @Test("permissionNeeded event sets status to waiting")
@@ -48,57 +62,52 @@ struct SessionLifecycleTests {
         #expect(session?.status == .waiting)
     }
 
-    @Test("taskCompleted event closes session")
-    func taskCompletedClosesSession() throws {
+    @Test("agentStopped event does not change session state")
+    func agentStoppedNoStateChange() throws {
         let db = try makeDB()
-        let event = makeEvent(type: .taskCompleted)
-        try SessionLifecycleService.processEvent(event, in: db)
+        // Create session in busy state
+        let submitEvent = makeEvent(type: .promptSubmitted, tier: .background)
+        try SessionLifecycleService.processEvent(submitEvent, in: db)
+        try SessionStore.updateStatus(id: submitEvent.sessionId, to: .busy, in: db)
 
-        let session = try SessionStore.fetch(id: event.sessionId, in: db)
-        #expect(session?.status == .completed)
-        #expect(session?.endedAt != nil)
+        let stopEvent = makeEvent(type: .agentStopped, tier: .background)
+        try SessionLifecycleService.processEvent(stopEvent, in: db)
+
+        // agentStopped alone doesn't change state — StopWindowService resolves idle/waiting
+        let session = try SessionStore.fetch(id: stopEvent.sessionId, in: db)
+        #expect(session?.status == .busy)
     }
 
-    @Test("taskError event closes session")
-    func taskErrorClosesSession() throws {
-        let db = try makeDB()
-        let event = makeEvent(type: .taskError, tier: .review)
-        try SessionLifecycleService.processEvent(event, in: db)
-
-        let session = try SessionStore.fetch(id: event.sessionId, in: db)
-        #expect(session?.status == .error)
-        #expect(session?.endedAt != nil)
-    }
-
-    @Test("Event for completed session reopens it")
+    @Test("Event for completed session reopens it to idle")
     func eventReopensCompletedSession() throws {
         let db = try makeDB()
-        // First: create and complete the session
-        let completedEvent = makeEvent(type: .taskCompleted)
-        try SessionLifecycleService.processEvent(completedEvent, in: db)
+        // Create session then close it manually
+        let firstEvent = makeEvent(type: .agentStopped)
+        try SessionLifecycleService.processEvent(firstEvent, in: db)
+        try SessionStore.close(id: firstEvent.sessionId, status: .completed, in: db)
 
-        let closed = try SessionStore.fetch(id: completedEvent.sessionId, in: db)
+        let closed = try SessionStore.fetch(id: firstEvent.sessionId, in: db)
         #expect(closed?.status == .completed)
 
-        // Then: send a new event for the same session
-        let newEvent = makeEvent(sessionId: completedEvent.sessionId, type: .taskStarted)
+        // New event reopens to idle
+        let newEvent = makeEvent(sessionId: firstEvent.sessionId, type: .agentStopped)
         try SessionLifecycleService.processEvent(newEvent, in: db)
 
-        let reopened = try SessionStore.fetch(id: completedEvent.sessionId, in: db)
-        #expect(reopened?.status == .running)
+        let reopened = try SessionStore.fetch(id: firstEvent.sessionId, in: db)
+        #expect(reopened?.status == .idle)
         #expect(reopened?.endedAt == nil)
     }
 
     @Test("Subsequent event updates lastEventTitle")
     func subsequentEventUpdatesTitle() throws {
         let db = try makeDB()
-        let firstEvent = makeEvent(type: .taskStarted)
+        let firstEvent = makeEvent(type: .agentStopped)
         try SessionLifecycleService.processEvent(firstEvent, in: db)
 
         let secondEvent = DevEvent(
             id: UUID().uuidString,
             sessionId: firstEvent.sessionId,
-            type: .taskStarted,
+            type: .agentStopped,
             title: "Updated title",
             detail: "/Users/dev/project",
             payload: "{}",
@@ -115,7 +124,7 @@ struct SessionLifecycleTests {
 
     // MARK: - handleSessionLifecycle tests
 
-    @Test("SessionStart creates a new running session")
+    @Test("SessionStart creates a new idle session")
     func testSessionStartCreatesSession() throws {
         let db = try makeDB()
         let payload = HookPayload(
@@ -127,7 +136,7 @@ struct SessionLifecycleTests {
         try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
 
         let session = try db.read { db in try DevSession.fetchOne(db, key: "s-start") }
-        #expect(session?.status == .running)
+        #expect(session?.status == .idle)
         #expect(session?.project == "myapp")
         #expect(session?.cwd == "/Users/me/Projects/myapp")
         #expect(session?.endedAt == nil)
@@ -151,16 +160,16 @@ struct SessionLifecycleTests {
         try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
 
         let session = try db.read { db in try DevSession.fetchOne(db, key: "s-reopen") }
-        #expect(session?.status == .running)
+        #expect(session?.status == .idle)
         #expect(session?.endedAt == nil)
     }
 
-    @Test("SessionEnd closes a running session")
+    @Test("SessionEnd closes an idle session")
     func testSessionEndClosesSession() throws {
         let db = try makeDB()
         try db.write { db in
             var s = DevSession(id: "s-end", project: "myapp", cwd: "/Users/me/Projects/myapp",
-                               tool: "claude-code", status: .running,
+                               tool: "claude-code", status: .idle,
                                startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil)
             try s.insert(db)
         }
@@ -195,7 +204,7 @@ struct SessionLifecycleTests {
         let db = try makeDB()
         try db.write { db in
             var s = DevSession(id: "s-end2", project: "myapp", cwd: nil,
-                               tool: "claude-code", status: .running,
+                               tool: "claude-code", status: .idle,
                                startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil)
             try s.insert(db)
         }
@@ -227,22 +236,20 @@ struct SessionLifecycleTests {
         #expect(session?.terminalApp == "ghostty")
     }
 
-    @Test("SessionStart on already-running session updates tty")
-    func sessionStartOnRunningUpdatedTty() throws {
+    @Test("SessionStart on already-idle session updates tty")
+    func sessionStartOnIdleUpdatesTty() throws {
         let db = try makeDB()
-        // Pre-insert a running session with an old tty
         try db.write { db in
             var s = DevSession(
-                id: "running-tty", project: "myapp", cwd: "/Users/dev/myapp",
+                id: "idle-tty", project: "myapp", cwd: "/Users/dev/myapp",
                 tty: "/dev/ttys001", terminalApp: "ghostty",
-                tool: "claude-code", status: .running,
+                tool: "claude-code", status: .idle,
                 startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil
             )
             try s.insert(db)
         }
-        // New SessionStart with updated tty (Claude Code restarted)
         let payload = HookPayload(
-            sessionId: "running-tty",
+            sessionId: "idle-tty",
             cwd: "/Users/dev/myapp",
             hookEventName: "SessionStart",
             tty: "/dev/ttys009",
@@ -250,15 +257,14 @@ struct SessionLifecycleTests {
         )
         try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
 
-        let session = try db.read { db in try DevSession.fetchOne(db, key: "running-tty") }
-        #expect(session?.status == .running)   // status unchanged
-        #expect(session?.tty == "/dev/ttys009")  // tty updated
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "idle-tty") }
+        #expect(session?.status == .idle)
+        #expect(session?.tty == "/dev/ttys009")
     }
 
     @Test("SessionStart updates tty and terminalApp on reopen")
     func sessionStartUpdatesTtyOnReopen() throws {
         let db = try makeDB()
-        // Pre-insert a completed session without tty
         try db.write { db in
             var s = DevSession(
                 id: "reopen-tty", project: "myapp", cwd: "/Users/dev/myapp",
@@ -277,7 +283,7 @@ struct SessionLifecycleTests {
         try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
 
         let session = try db.read { db in try DevSession.fetchOne(db, key: "reopen-tty") }
-        #expect(session?.status == .running)
+        #expect(session?.status == .idle)
         #expect(session?.tty == "/dev/ttys007")
         #expect(session?.terminalApp == "Apple_Terminal")
     }

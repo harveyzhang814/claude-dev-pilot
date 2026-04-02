@@ -9,7 +9,7 @@ public enum SessionStore {
     public static func fetchActive(in db: any DatabaseReader) throws -> [DevSession] {
         try db.read { db in
             try DevSession
-                .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue].contains(DevSession.Columns.status))
+                .filter([SessionStatus.idle.rawValue, SessionStatus.busy.rawValue, SessionStatus.waiting.rawValue].contains(DevSession.Columns.status))
                 .order(DevSession.Columns.startedAt.desc).fetchAll(db)
         }
     }
@@ -34,11 +34,11 @@ public enum SessionStore {
 
     public static func reopen(id: String, in db: any DatabaseWriter) throws {
         try db.write { db in
-            try db.execute(sql: "UPDATE sessions SET status = 'running', ended_at = NULL WHERE id = ?", arguments: [id])
+            try db.execute(sql: "UPDATE sessions SET status = 'idle', ended_at = NULL WHERE id = ?", arguments: [id])
         }
     }
 
-    /// Returns running/waiting sessions that have had no event activity in the last `seconds`.
+    /// Returns idle/waiting sessions that have had no event activity in the last `seconds`.
     /// Callers can inspect each session's `tty` before deciding whether to mark stale.
     public static func fetchStaleCandidates(olderThan seconds: TimeInterval, in db: any DatabaseReader) throws -> [DevSession] {
         let cutoffDate = Date(timeIntervalSinceNow: -seconds)
@@ -49,7 +49,7 @@ public enum SessionStore {
         return try db.read { db in
             try DevSession.fetchAll(db, sql: """
                 SELECT * FROM sessions
-                WHERE status IN ('running', 'waiting')
+                WHERE status IN ('idle', 'busy', 'waiting')
                 AND started_at < ?
                 AND id NOT IN (SELECT DISTINCT session_id FROM events WHERE timestamp > ?)
                 """, arguments: [cutoff, cutoff])
@@ -84,7 +84,7 @@ public enum SessionStore {
         return try db.write { db in
             try db.execute(sql: """
                 UPDATE sessions SET status = 'stale', ended_at = ?
-                WHERE status IN ('running', 'waiting')
+                WHERE status IN ('idle', 'busy', 'waiting')
                 AND started_at < ?
                 AND id NOT IN (SELECT DISTINCT session_id FROM events WHERE timestamp > ?)
                 """, arguments: [now, cutoff, cutoff])
