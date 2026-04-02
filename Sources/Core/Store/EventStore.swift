@@ -48,7 +48,7 @@ public enum EventStore {
                     .fetchCount(db)
                 if remaining == 0 {
                     try db.execute(
-                        sql: "UPDATE sessions SET status = 'running' WHERE id = ? AND status = 'waiting'",
+                        sql: "UPDATE sessions SET status = 'idle' WHERE id = ? AND status = 'waiting'",
                         arguments: [event.sessionId]
                     )
                 }

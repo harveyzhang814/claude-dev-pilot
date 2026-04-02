@@ -12,7 +12,7 @@ struct EventStoreGroupedTests {
         return db
     }
 
-    private func makeSession(id: String, status: SessionStatus = .running) -> DevSession {
+    private func makeSession(id: String, status: SessionStatus = .idle) -> DevSession {
         DevSession(
             id: id, project: id, cwd: "/Users/dev/\(id)",
             tool: "claude-code", status: status,
@@ -22,12 +22,12 @@ struct EventStoreGroupedTests {
 
     private func makeEvent(
         id: String, sessionId: String,
-        tier: AttentionTier = .review,
+        tier: AttentionTier = .action,
         timestamp: Date = Date(),
         isDismissed: Bool = false
     ) -> DevEvent {
         DevEvent(
-            id: id, sessionId: sessionId, type: .taskCompleted,
+            id: id, sessionId: sessionId, type: .agentStopped,
             title: "Test", detail: nil, payload: "{}",
             tokenCount: nil, durationSeconds: nil,
             timestamp: timestamp, attentionTier: tier,
@@ -77,7 +77,7 @@ struct EventStoreGroupedTests {
             var s1 = makeSession(id: "s1")
             try s1.insert(dbConn)
             try makeEvent(id: "e1", sessionId: "s1", tier: .background).insert(dbConn)
-            try makeEvent(id: "e2", sessionId: "s1", tier: .review).insert(dbConn)
+            try makeEvent(id: "e2", sessionId: "s1", tier: .action).insert(dbConn)
         }
         let grouped = try db.read { dbConn in
             try EventStore.fetchGroupedBySession(sessionIds: ["s1"], in: dbConn)

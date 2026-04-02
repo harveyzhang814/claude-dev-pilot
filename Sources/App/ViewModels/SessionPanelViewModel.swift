@@ -27,10 +27,10 @@ public final class SessionPanelViewModel {
                 receiveValue: { [weak self] sessions in
                     guard let self else { return }
                     self.activeSessions = sessions.filter {
-                        $0.status == .running || $0.status == .waiting
+                        $0.status == .idle || $0.status == .busy || $0.status == .waiting
                     }
                     self.completedSessions = sessions.filter {
-                        $0.status == .completed || $0.status == .error
+                        $0.status == .completed
                     }
                     self.staleSessions = sessions.filter {
                         $0.status == .stale

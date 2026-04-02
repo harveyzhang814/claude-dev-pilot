@@ -118,7 +118,6 @@ struct EventCardView: View {
     private var tierColor: Color {
         switch event.attentionTier {
         case .action: return .red
-        case .review: return .orange
         case .background: return .gray
         }
     }
@@ -126,9 +125,9 @@ struct EventCardView: View {
     private var tierIcon: String {
         switch event.type {
         case .permissionNeeded: return "exclamationmark.triangle.fill"
-        case .taskCompleted: return "checkmark.circle.fill"
-        case .taskError: return "xmark.circle.fill"
-        case .taskStarted: return "arrow.clockwise"
+        case .promptSubmitted:  return "arrow.up.circle"
+        case .agentStopped:     return "checkmark.circle.fill"
+        case .authSuccess:      return "lock.open.fill"
         }
     }
 

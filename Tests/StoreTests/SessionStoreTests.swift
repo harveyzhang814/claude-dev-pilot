@@ -14,7 +14,7 @@ struct SessionStoreTests {
 
     private func makeSession(
         id: String = "session-1",
-        status: SessionStatus = .running,
+        status: SessionStatus = .idle,
         startedAt: Date = Date()
     ) -> DevSession {
         DevSession(
@@ -35,7 +35,7 @@ struct SessionStoreTests {
         #expect(fetched != nil)
         #expect(fetched?.id == session.id)
         #expect(fetched?.project == session.project)
-        #expect(fetched?.status == .running)
+        #expect(fetched?.status == .idle)
     }
 
     @Test("Update session status")
@@ -75,7 +75,7 @@ struct SessionStoreTests {
 
         try SessionStore.reopen(id: session.id, in: db)
         let reopened = try SessionStore.fetch(id: session.id, in: db)
-        #expect(reopened?.status == .running)
+        #expect(reopened?.status == .idle)
         #expect(reopened?.endedAt == nil)
     }
 
@@ -97,18 +97,20 @@ struct SessionStoreTests {
         #expect(oldFetched?.status == .stale)
 
         let newFetched = try SessionStore.fetch(id: "new-session", in: db)
-        #expect(newFetched?.status == .running)
+        #expect(newFetched?.status == .idle)
     }
 
-    @Test("Fetch active sessions returns only running and waiting")
+    @Test("Fetch active sessions returns idle, busy, and waiting only")
     func fetchActiveSessions() throws {
         let db = try makeDB()
-        var running = makeSession(id: "s-running", status: .running)
+        var idle = makeSession(id: "s-idle", status: .idle)
+        var busy = makeSession(id: "s-busy", status: .busy)
         var waiting = makeSession(id: "s-waiting", status: .waiting)
         var completed = makeSession(id: "s-completed", status: .completed)
         var stale = makeSession(id: "s-stale", status: .stale)
         try db.write { dbConn in
-            try running.insert(dbConn)
+            try idle.insert(dbConn)
+            try busy.insert(dbConn)
             try waiting.insert(dbConn)
             try completed.insert(dbConn)
             try stale.insert(dbConn)
@@ -116,7 +118,8 @@ struct SessionStoreTests {
 
         let active = try SessionStore.fetchActive(in: db)
         let activeIds = active.map(\.id)
-        #expect(activeIds.contains("s-running"))
+        #expect(activeIds.contains("s-idle"))
+        #expect(activeIds.contains("s-busy"))
         #expect(activeIds.contains("s-waiting"))
         #expect(!activeIds.contains("s-completed"))
         #expect(!activeIds.contains("s-stale"))

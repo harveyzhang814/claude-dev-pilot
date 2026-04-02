@@ -20,13 +20,13 @@ public enum SessionLifecycleService {
                         arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.sessionId]
                     )
                     // If closed, also reset status and clear ended_at
-                    if session.status == .completed || session.status == .error || session.status == .stale {
+                    if session.status == .completed || session.status == .stale {
                         try db.execute(
-                            sql: "UPDATE sessions SET status = 'running', ended_at = NULL WHERE id = ?",
+                            sql: "UPDATE sessions SET status = 'idle', ended_at = NULL WHERE id = ?",
                             arguments: [payload.sessionId]
                         )
                     }
-                    // If already running/waiting: cwd/tty/terminalApp updated above, status unchanged
+                    // If already idle/busy/waiting: cwd/tty/terminalApp updated above, status unchanged
                 } else {
                     var session = DevSession(
                         id: payload.sessionId,
@@ -35,7 +35,7 @@ public enum SessionLifecycleService {
                         tty: payload.tty,
                         terminalApp: payload.terminalApp,
                         tool: "claude-code",
-                        status: .running,
+                        status: .idle,
                         startedAt: Date(),
                         endedAt: nil,
                         totalTokens: nil,
@@ -60,65 +60,67 @@ public enum SessionLifecycleService {
     }
 
     /// Processes a DevEvent: creates/updates the session, inserts the event, transitions session state.
+    ///
+    /// State transitions:
+    ///   - `promptSubmitted`  → `busy`
+    ///   - `permissionNeeded` → `waiting`
+    ///   - `agentStopped`     → no change (StopWindowService resolves idle/waiting after window)
+    ///   - `authSuccess`      → no change (record-only)
     public static func processEvent(_ event: DevEvent, in db: any DatabaseWriter) throws {
         try db.write { db in
             let existingSession = try DevSession.fetchOne(db, key: event.sessionId)
 
             if let session = existingSession {
-                // Reopen if closed
-                if session.status == .completed || session.status == .error {
-                    try db.execute(sql: "UPDATE sessions SET status = 'running', ended_at = NULL WHERE id = ?",
-                                   arguments: [event.sessionId])
+                // Reopen completed/stale sessions on new activity
+                if session.status == .completed || session.status == .stale {
+                    try db.execute(
+                        sql: "UPDATE sessions SET status = 'idle', ended_at = NULL WHERE id = ?",
+                        arguments: [event.sessionId]
+                    )
                 }
 
                 try event.insert(db)
+                try db.execute(
+                    sql: "UPDATE sessions SET last_event_title = ? WHERE id = ?",
+                    arguments: [event.title, event.sessionId]
+                )
 
                 switch event.type {
+                case .promptSubmitted:
+                    try db.execute(
+                        sql: "UPDATE sessions SET status = 'busy' WHERE id = ?",
+                        arguments: [event.sessionId]
+                    )
                 case .permissionNeeded:
-                    try db.execute(sql: "UPDATE sessions SET status = 'waiting', last_event_title = ? WHERE id = ?",
-                                   arguments: [event.title, event.sessionId])
-                case .taskCompleted:
-                    let now = ISO8601DateFormatter().string(from: Date())
-                    try db.execute(sql: "UPDATE sessions SET status = 'completed', ended_at = ?, last_event_title = ? WHERE id = ?",
-                                   arguments: [now, event.title, event.sessionId])
-                case .taskError:
-                    let now = ISO8601DateFormatter().string(from: Date())
-                    try db.execute(sql: "UPDATE sessions SET status = 'error', ended_at = ?, last_event_title = ? WHERE id = ?",
-                                   arguments: [now, event.title, event.sessionId])
-                case .taskStarted:
-                    try db.execute(sql: "UPDATE sessions SET status = 'running', last_event_title = ? WHERE id = ?",
-                                   arguments: [event.title, event.sessionId])
+                    try db.execute(
+                        sql: "UPDATE sessions SET status = 'waiting' WHERE id = ?",
+                        arguments: [event.sessionId]
+                    )
+                case .agentStopped, .authSuccess:
+                    break
                 }
 
                 if let tokens = event.tokenCount {
-                    try db.execute(sql: "UPDATE sessions SET total_tokens = COALESCE(total_tokens, 0) + ? WHERE id = ?",
-                                   arguments: [tokens, event.sessionId])
+                    try db.execute(
+                        sql: "UPDATE sessions SET total_tokens = COALESCE(total_tokens, 0) + ? WHERE id = ?",
+                        arguments: [tokens, event.sessionId]
+                    )
                 }
             } else {
-                // Create new session (app started after session began; SessionStart was missed)
+                // Session not found — app started after SessionStart was missed
                 let cwd = event.detail
                 let project = cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "unknown"
+                let initialStatus: SessionStatus = event.type == .promptSubmitted ? .busy
+                    : event.type == .permissionNeeded ? .waiting
+                    : .idle
                 var session = DevSession(
                     id: event.sessionId, project: project,
                     cwd: cwd,
-                    tool: "claude-code", status: .running, startedAt: Date(),
+                    tool: "claude-code", status: initialStatus, startedAt: Date(),
                     endedAt: nil, totalTokens: event.tokenCount, lastEventTitle: event.title
                 )
                 try session.insert(db)
                 try event.insert(db)
-
-                // Apply state transition for first event
-                if event.type == .permissionNeeded {
-                    try db.execute(sql: "UPDATE sessions SET status = 'waiting' WHERE id = ?", arguments: [event.sessionId])
-                } else if event.type == .taskCompleted {
-                    let now = ISO8601DateFormatter().string(from: Date())
-                    try db.execute(sql: "UPDATE sessions SET status = 'completed', ended_at = ? WHERE id = ?",
-                                   arguments: [now, event.sessionId])
-                } else if event.type == .taskError {
-                    let now = ISO8601DateFormatter().string(from: Date())
-                    try db.execute(sql: "UPDATE sessions SET status = 'error', ended_at = ? WHERE id = ?",
-                                   arguments: [now, event.sessionId])
-                }
             }
         }
     }

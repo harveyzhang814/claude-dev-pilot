@@ -80,7 +80,7 @@ public final class PopoverViewModel {
         // Single merged observation: active sessions + their grouped events (atomic)
         let activeSessionsAndEventsObservation = ValueObservation.tracking { db -> ([DevSession], [String: [DevEvent]]) in
             let sessions = try DevSession
-                .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue]
+                .filter([SessionStatus.idle.rawValue, SessionStatus.busy.rawValue, SessionStatus.waiting.rawValue]
                     .contains(DevSession.Columns.status))
                 .order(DevSession.Columns.startedAt.desc)
                 .fetchAll(db)
