@@ -21,6 +21,7 @@ struct SessionGroupView: View {
                     .fontWeight(.semibold)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .layoutPriority(1)
 
                 Text(sessionStatusTag(session))
                     .font(.caption2)
@@ -56,18 +57,28 @@ struct SessionGroupView: View {
                 }
             }
         }
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(session.project), \(sessionStatusTag(session))")
     }
 }
 
 // Internal so tests can reach without crossing module boundary.
 func sessionStatusTag(_ session: DevSession) -> String {
-    session.status == .waiting ? "needs input" : "running"
+    switch session.status {
+    case .waiting: return "needs input"
+    case .running: return "running"
+    default:
+        assertionFailure("SessionGroupView received unexpected status: \(session.status)")
+        return "running"
+    }
 }
 
 func sessionStatusColor(_ session: DevSession) -> Color {
-    session.status == .waiting
-        ? Color(red: 1.0,  green: 0.271, blue: 0.227)  // #FF453A
-        : Color(red: 1.0,  green: 0.624, blue: 0.039)  // #FF9F0A
+    switch session.status {
+    case .waiting: return Color(red: 1.0, green: 0.271, blue: 0.227)  // #FF453A
+    case .running: return Color(red: 1.0, green: 0.624, blue: 0.039)  // #FF9F0A
+    default:
+        assertionFailure("SessionGroupView received unexpected status: \(session.status)")
+        return Color(red: 1.0, green: 0.624, blue: 0.039)
+    }
 }
