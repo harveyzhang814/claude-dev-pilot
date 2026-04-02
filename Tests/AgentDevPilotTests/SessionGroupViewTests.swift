@@ -16,16 +16,16 @@ struct SessionGroupViewTests {
 
     @Test("statusTag for idle session")
     func statusTagIdle() {
-        #expect(sessionStatusTag(makeSession(status: .idle)) == "idle")
+        #expect(sessionStatusTag(makeSession(status: .idle)) == "Idle")
     }
 
     @Test("statusTag for busy session")
     func statusTagBusy() {
-        #expect(sessionStatusTag(makeSession(status: .busy)) == "busy")
+        #expect(sessionStatusTag(makeSession(status: .busy)) == "Running")
     }
 
     @Test("statusTag for waiting session")
     func statusTagWaiting() {
-        #expect(sessionStatusTag(makeSession(status: .waiting)) == "needs input")
+        #expect(sessionStatusTag(makeSession(status: .waiting)) == "Waiting")
     }
 }
