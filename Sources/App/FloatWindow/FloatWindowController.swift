@@ -131,7 +131,10 @@ final class FloatWindowController: NSObject {
     }
 
     private func positionPanel(height: CGFloat, animated: Bool) {
-        guard let screen = NSScreen.main else { return }
+        // Use the screen that contains the menu bar (maxY == frame.maxY), not just NSScreen.main,
+        // so the panel appears on the correct display in multi-monitor setups.
+        let screen = NSScreen.screens.first(where: { $0.visibleFrame.maxY == $0.frame.maxY }) ?? NSScreen.main
+        guard let screen else { return }
         let visible = screen.visibleFrame
         let x = screen.frame.midX - 180
         let y = visible.maxY - height
@@ -197,7 +200,7 @@ final class FloatWindowController: NSObject {
         cancelCollapseTimer()
         collapseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.currentState == .expanded else { return }
+                guard let self, self.isObserving, self.currentState == .expanded else { return }
                 let next: FloatWindowDisplayState.Mode = self.viewModel.recentEvents.isEmpty ? .hidden : .compact
                 self.transition(to: next)
             }
