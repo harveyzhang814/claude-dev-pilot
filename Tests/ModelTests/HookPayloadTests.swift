@@ -105,6 +105,37 @@ struct HookPayloadTests {
         #expect(payload.model == nil)
     }
 
+    @Test("SessionStart payload with tty and terminal_app")
+    func sessionStartWithTtyAndTerminalApp() throws {
+        let json = """
+        {
+            "session_id": "s1",
+            "cwd": "/Users/dev/myapp",
+            "hook_event_name": "SessionStart",
+            "tty": "/dev/ttys003",
+            "terminal_app": "ghostty"
+        }
+        """.data(using: .utf8)!
+        let payload = try JSONDecoder().decode(HookPayload.self, from: json)
+        #expect(payload.tty == "/dev/ttys003")
+        #expect(payload.terminalApp == "ghostty")
+    }
+
+    @Test("Payload without tty or terminal_app decodes as nil")
+    func payloadWithoutTtyIsNil() throws {
+        let json = """
+        {
+            "session_id": "s2",
+            "cwd": "/Users/dev/myapp",
+            "hook_event_name": "Notification",
+            "message": "done"
+        }
+        """.data(using: .utf8)!
+        let payload = try JSONDecoder().decode(HookPayload.self, from: json)
+        #expect(payload.tty == nil)
+        #expect(payload.terminalApp == nil)
+    }
+
     @Test("Unknown fields are ignored")
     func unknownFieldsIgnored() throws {
         let json = """
