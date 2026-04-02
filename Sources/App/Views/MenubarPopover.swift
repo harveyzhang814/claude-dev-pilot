@@ -37,6 +37,7 @@ struct MenubarPopover: View {
                             }
                             SessionGroupView(
                                 session: session,
+                                displayName: viewModel.displayNames[session.id] ?? session.displayName,
                                 events: viewModel.eventsBySession[session.id] ?? [],
                                 onFocusSession: onFocusSession
                             ) { eventId in

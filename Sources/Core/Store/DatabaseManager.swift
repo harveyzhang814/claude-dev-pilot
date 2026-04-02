@@ -92,6 +92,12 @@ public enum DatabaseManager {
             try db.execute(sql: "UPDATE events SET attention_tier = 'background' WHERE attention_tier = 'review'")
         }
 
+        migrator.registerMigration("v7_session_custom_name") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "custom_name", .text)
+            }
+        }
+
         try migrator.migrate(db)
     }
 

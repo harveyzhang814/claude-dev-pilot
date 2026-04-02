@@ -19,6 +19,13 @@ public enum SessionLifecycleService {
                         sql: "UPDATE sessions SET cwd = ?, tty = ?, terminal_app = ? WHERE id = ?",
                         arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.sessionId]
                     )
+                    // Update custom_name only when explicitly provided (don't clear a prior rename)
+                    if let title = payload.title {
+                        try db.execute(
+                            sql: "UPDATE sessions SET custom_name = ? WHERE id = ?",
+                            arguments: [title, payload.sessionId]
+                        )
+                    }
                     // If closed, also reset status and clear ended_at
                     if session.status == .completed || session.status == .stale {
                         try db.execute(
@@ -31,6 +38,7 @@ public enum SessionLifecycleService {
                     var session = DevSession(
                         id: payload.sessionId,
                         project: project,
+                        customName: payload.title,
                         cwd: payload.cwd,
                         tty: payload.tty,
                         terminalApp: payload.terminalApp,
@@ -66,7 +74,7 @@ public enum SessionLifecycleService {
     ///   - `permissionNeeded` → `waiting`
     ///   - `agentStopped`     → no change (StopWindowService resolves idle/waiting after window)
     ///   - `authSuccess`      → no change (record-only)
-    public static func processEvent(_ event: DevEvent, in db: any DatabaseWriter) throws {
+    public static func processEvent(_ event: DevEvent, sessionTitle: String? = nil, in db: any DatabaseWriter) throws {
         try db.write { db in
             let existingSession = try DevSession.fetchOne(db, key: event.sessionId)
 
@@ -84,6 +92,13 @@ public enum SessionLifecycleService {
                     sql: "UPDATE sessions SET last_event_title = ? WHERE id = ?",
                     arguments: [event.title, event.sessionId]
                 )
+                // Update custom_name when payload carries a title (e.g. after /rename)
+                if let title = sessionTitle {
+                    try db.execute(
+                        sql: "UPDATE sessions SET custom_name = ? WHERE id = ?",
+                        arguments: [title, event.sessionId]
+                    )
+                }
 
                 switch event.type {
                 case .promptSubmitted:

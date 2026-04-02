@@ -3,6 +3,7 @@ import Core
 
 struct SessionGroupView: View {
     let session: DevSession
+    let displayName: String
     let events: [DevEvent]
     var onFocusSession: ((DevSession) -> Void)?
     var onDismiss: (String) -> Void
@@ -19,7 +20,7 @@ struct SessionGroupView: View {
                         .frame(width: 7, height: 7)
                         .accessibilityHidden(true)
 
-                    Text(session.project)
+                    Text(displayName)
                         .font(.callout)
                         .fontWeight(.semibold)
                         .lineLimit(1)
@@ -46,7 +47,7 @@ struct SessionGroupView: View {
             .padding(.horizontal, 12)
             .padding(.top, 9)
             .padding(.bottom, 5)
-            .accessibilityLabel("\(session.project), \(sessionStatusTag(session)), tap to focus terminal")
+            .accessibilityLabel("\(displayName), \(sessionStatusTag(session)), tap to focus terminal")
 
             if events.isEmpty {
                 Text("Working...")
