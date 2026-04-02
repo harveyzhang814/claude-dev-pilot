@@ -2,6 +2,56 @@ import Foundation
 import GRDB
 
 public enum SessionLifecycleService {
+    /// Handles SessionStart and SessionEnd hooks.
+    /// Only writes to the sessions table — never creates DevEvent records.
+    public static func handleSessionLifecycle(payload: HookPayload, in db: any DatabaseWriter) throws {
+        let project = URL(fileURLWithPath: payload.cwd).lastPathComponent
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        try db.write { db in
+            let existing = try DevSession.fetchOne(db, key: payload.sessionId)
+
+            switch payload.hookEventName {
+            case "SessionStart":
+                if let session = existing {
+                    // Reopen if closed; always update cwd
+                    if session.status == .completed || session.status == .error || session.status == .stale {
+                        try db.execute(
+                            sql: "UPDATE sessions SET status = 'running', ended_at = NULL, cwd = ? WHERE id = ?",
+                            arguments: [payload.cwd, payload.sessionId]
+                        )
+                    }
+                    // If already running/waiting: no-op (idempotent)
+                } else {
+                    var session = DevSession(
+                        id: payload.sessionId,
+                        project: project,
+                        cwd: payload.cwd,
+                        tool: "claude-code",
+                        status: .running,
+                        startedAt: Date(),
+                        endedAt: nil,
+                        totalTokens: nil,
+                        lastEventTitle: nil
+                    )
+                    try session.insert(db)
+                }
+
+            case "SessionEnd":
+                if existing != nil {
+                    try db.execute(
+                        sql: "UPDATE sessions SET status = 'completed', ended_at = ? WHERE id = ?",
+                        arguments: [now, payload.sessionId]
+                    )
+                }
+                // Session not found → silently ignore (app may have restarted)
+
+            default:
+                break
+            }
+        }
+    }
+
     /// Processes a DevEvent: creates/updates the session, inserts the event, transitions session state.
     public static func processEvent(_ event: DevEvent, in db: any DatabaseWriter) throws {
         try db.write { db in

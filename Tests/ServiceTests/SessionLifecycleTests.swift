@@ -112,4 +112,101 @@ struct SessionLifecycleTests {
         let session = try SessionStore.fetch(id: firstEvent.sessionId, in: db)
         #expect(session?.lastEventTitle == "Updated title")
     }
+
+    // MARK: - handleSessionLifecycle tests
+
+    @Test("SessionStart creates a new running session")
+    func testSessionStartCreatesSession() throws {
+        let db = try makeDB()
+        let payload = HookPayload(
+            sessionId: "s-start",
+            cwd: "/Users/me/Projects/myapp",
+            hookEventName: "SessionStart",
+            source: "startup"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "s-start") }
+        #expect(session?.status == .running)
+        #expect(session?.project == "myapp")
+        #expect(session?.cwd == "/Users/me/Projects/myapp")
+        #expect(session?.endedAt == nil)
+    }
+
+    @Test("SessionStart reopens a completed session")
+    func testSessionStartReopensCompletedSession() throws {
+        let db = try makeDB()
+        try db.write { db in
+            var s = DevSession(id: "s-reopen", project: "myapp", cwd: "/Users/me/Projects/myapp",
+                               tool: "claude-code", status: .completed,
+                               startedAt: Date(), endedAt: Date(), totalTokens: nil, lastEventTitle: nil)
+            try s.insert(db)
+        }
+        let payload = HookPayload(
+            sessionId: "s-reopen",
+            cwd: "/Users/me/Projects/myapp",
+            hookEventName: "SessionStart",
+            source: "resume"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "s-reopen") }
+        #expect(session?.status == .running)
+        #expect(session?.endedAt == nil)
+    }
+
+    @Test("SessionEnd closes a running session")
+    func testSessionEndClosesSession() throws {
+        let db = try makeDB()
+        try db.write { db in
+            var s = DevSession(id: "s-end", project: "myapp", cwd: "/Users/me/Projects/myapp",
+                               tool: "claude-code", status: .running,
+                               startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil)
+            try s.insert(db)
+        }
+        let payload = HookPayload(
+            sessionId: "s-end",
+            cwd: "/Users/me/Projects/myapp",
+            hookEventName: "SessionEnd"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "s-end") }
+        #expect(session?.status == .completed)
+        #expect(session?.endedAt != nil)
+    }
+
+    @Test("SessionStart does not create DevEvent records")
+    func testSessionStartDoesNotCreateDevEvent() throws {
+        let db = try makeDB()
+        let payload = HookPayload(
+            sessionId: "s-no-event",
+            cwd: "/Users/me/Projects/myapp",
+            hookEventName: "SessionStart"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let eventCount = try db.read { db in try DevEvent.fetchCount(db) }
+        #expect(eventCount == 0, "SessionStart must not create DevEvent records")
+    }
+
+    @Test("SessionEnd does not create DevEvent records")
+    func testSessionEndDoesNotCreateDevEvent() throws {
+        let db = try makeDB()
+        try db.write { db in
+            var s = DevSession(id: "s-end2", project: "myapp", cwd: nil,
+                               tool: "claude-code", status: .running,
+                               startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil)
+            try s.insert(db)
+        }
+        let payload = HookPayload(
+            sessionId: "s-end2",
+            cwd: "/Users/me/Projects/myapp",
+            hookEventName: "SessionEnd"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let eventCount = try db.read { db in try DevEvent.fetchCount(db) }
+        #expect(eventCount == 0, "SessionEnd must not create DevEvent records")
+    }
 }
