@@ -288,6 +288,71 @@ struct SessionLifecycleTests {
         #expect(session?.terminalApp == "Apple_Terminal")
     }
 
+    // MARK: - custom_name / displayName tests
+
+    @Test("SessionStart with -n flag stores customName on new session")
+    func sessionStartWithTitleStoresCustomName() throws {
+        let db = try makeDB()
+        let payload = HookPayload(
+            sessionId: "named-session",
+            cwd: "/Users/dev/myapp",
+            hookEventName: "SessionStart",
+            title: "auth-refactor"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "named-session") }
+        #expect(session?.customName == "auth-refactor")
+        #expect(session?.displayName == "auth-refactor")
+    }
+
+    @Test("SessionStart without title leaves existing customName intact")
+    func sessionStartWithoutTitlePreservesCustomName() throws {
+        let db = try makeDB()
+        try db.write { db in
+            var s = DevSession(
+                id: "s-keep-name", project: "myapp", customName: "my-feature",
+                cwd: "/Users/dev/myapp", tool: "claude-code", status: .completed,
+                startedAt: Date(), endedAt: Date(), totalTokens: nil, lastEventTitle: nil
+            )
+            try s.insert(db)
+        }
+        let payload = HookPayload(
+            sessionId: "s-keep-name",
+            cwd: "/Users/dev/myapp",
+            hookEventName: "SessionStart"
+            // no title — user restarted without -n
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "s-keep-name") }
+        #expect(session?.customName == "my-feature", "Prior custom name must be preserved when title is absent")
+    }
+
+    @Test("processEvent with sessionTitle updates customName mid-session")
+    func processEventWithSessionTitleUpdatesCustomName() throws {
+        let db = try makeDB()
+        let event = makeEvent(sessionId: "s-rename", type: .agentStopped)
+        try SessionLifecycleService.processEvent(event, in: db)
+
+        let renamed = makeEvent(sessionId: "s-rename", type: .agentStopped)
+        try SessionLifecycleService.processEvent(renamed, sessionTitle: "new-name", in: db)
+
+        let session = try SessionStore.fetch(id: "s-rename", in: db)
+        #expect(session?.customName == "new-name")
+        #expect(session?.displayName == "new-name")
+    }
+
+    @Test("displayName falls back to project when customName is nil")
+    func displayNameFallsBackToProject() throws {
+        let session = DevSession(
+            id: "s", project: "my-project", customName: nil,
+            tool: "claude-code", status: .idle,
+            startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil
+        )
+        #expect(session.displayName == "my-project")
+    }
+
     @Test("promptSubmitted auto-dismisses all prior notifications for the session")
     func promptSubmittedDismissesAllPriorNotifications() throws {
         let db = try makeDB()

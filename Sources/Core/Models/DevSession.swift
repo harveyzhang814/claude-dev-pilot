@@ -12,6 +12,7 @@ public enum SessionStatus: String, Codable, Sendable, DatabaseValueConvertible {
 public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, MutablePersistableRecord {
     public let id: String
     public var project: String    // lastPathComponent of cwd
+    public var customName: String?    // set via `claude /rename` or `-n` flag
     public var cwd: String?       // full path (added v3)
     public var tty: String?           // TTY device path, e.g. "/dev/ttys003"
     public var terminalApp: String?   // "ghostty" or "Apple_Terminal"
@@ -22,10 +23,15 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     public var totalTokens: Int?
     public var lastEventTitle: String?
 
+    /// Display name: custom name if set, otherwise the cwd-derived project name.
+    /// Deduplication (appending tty suffix) for sessions sharing the same project name
+    /// is handled at the call site (PopoverViewModel).
+    public var displayName: String { customName ?? project }
+
     public static let databaseTableName = "sessions"
 
     public enum Columns: String, ColumnExpression {
-        case id, project, cwd, tty
+        case id, project, customName = "custom_name", cwd, tty
         case terminalApp = "terminal_app"
         case tool, status
         case startedAt = "started_at", endedAt = "ended_at"
@@ -34,7 +40,7 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     }
 
     public enum CodingKeys: String, CodingKey {
-        case id, project, cwd, tty
+        case id, project, customName = "custom_name", cwd, tty
         case terminalApp = "terminal_app"
         case tool, status
         case startedAt = "started_at"
@@ -46,6 +52,7 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     public init(
         id: String,
         project: String,
+        customName: String? = nil,
         cwd: String? = nil,
         tty: String? = nil,
         terminalApp: String? = nil,
@@ -58,6 +65,7 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
     ) {
         self.id = id
         self.project = project
+        self.customName = customName
         self.cwd = cwd
         self.tty = tty
         self.terminalApp = terminalApp

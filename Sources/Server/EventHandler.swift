@@ -34,7 +34,7 @@ enum EventHandler {
 
             // Map payload → DevEvent and persist
             let event = EventMapper.map(payload)
-            try SessionLifecycleService.processEvent(event, in: db)
+            try SessionLifecycleService.processEvent(event, sessionTitle: payload.title, in: db)
 
             // Feed Stop and Notification events into the stop window for coalesced state resolution
             switch payload.hookEventName {

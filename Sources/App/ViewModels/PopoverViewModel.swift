@@ -14,6 +14,30 @@ public final class PopoverViewModel {
     public var activeSessions: [DevSession] = []
     public var eventsBySession: [String: [DevEvent]] = [:]
 
+    /// Deduplication-aware display names keyed by session id.
+    ///
+    /// Rules:
+    /// - Custom name (`/rename` or `-n`): use as-is.
+    /// - Single session for a project: show just the project name.
+    /// - Multiple sessions sharing the same project name: append tty suffix
+    ///   (e.g. "agent-dev-pilot · ttys003") so they're distinguishable.
+    public var displayNames: [String: String] {
+        var projectCount: [String: Int] = [:]
+        for session in activeSessions where session.customName == nil {
+            projectCount[session.project, default: 0] += 1
+        }
+        return activeSessions.reduce(into: [:]) { result, session in
+            if let name = session.customName {
+                result[session.id] = name
+            } else if (projectCount[session.project] ?? 0) > 1 {
+                let ttySuffix = session.tty.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
+                result[session.id] = ttySuffix.isEmpty ? session.project : "\(session.project) · \(ttySuffix)"
+            } else {
+                result[session.id] = session.project
+            }
+        }
+    }
+
     private var cancellables: Set<AnyCancellable> = []
     private var db: (any DatabaseReader & DatabaseWriter)?
 
