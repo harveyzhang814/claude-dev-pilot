@@ -24,7 +24,14 @@ enum EventHandler {
                 throw HTTPError(.badRequest, message: "Invalid JSON payload: \(error.localizedDescription)")
             }
 
-            // Map to DevEvent
+            // Route session lifecycle hooks directly — they never create DevEvent records
+            let sessionHooks: Set<String> = ["SessionStart", "SessionEnd"]
+            if sessionHooks.contains(payload.hookEventName) {
+                try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+                return Response(status: .ok, headers: [:], body: .init())
+            }
+
+            // Task / notification hooks → existing pipeline
             let event = EventMapper.map(payload)
 
             // Persist via SessionLifecycleService
