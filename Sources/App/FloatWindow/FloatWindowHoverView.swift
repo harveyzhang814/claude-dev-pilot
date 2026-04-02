@@ -57,6 +57,8 @@ struct FloatWindowHoverView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
         }
+        .background(Color(NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -115,7 +117,7 @@ private struct HoverSessionRowView: View {
                 // Status text
                 Text(sessionStatusTag(session))
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(sessionStatusColor(session))
                     .lineLimit(1)
 
                 // Last activity time
@@ -127,9 +129,10 @@ private struct HoverSessionRowView: View {
             .padding(.horizontal, 8)
             .frame(height: 36)
             .background(
-                isHovered
-                    ? Color(NSColor.controlBackgroundColor).opacity(0.5)
-                    : rowBackground
+                ZStack {
+                    rowBackground
+                    if isHovered { Color.white.opacity(0.05) }
+                }
             )
         }
         .buttonStyle(.plain)

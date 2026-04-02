@@ -6,6 +6,6 @@ import Foundation
 @MainActor
 @Observable
 final class FloatWindowDisplayState {
-    enum Mode { case hidden, compact, expanded }
+    enum Mode { case hidden, compact, hover, expanded }
     var mode: Mode = .hidden
 }

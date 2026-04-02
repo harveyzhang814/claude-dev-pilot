@@ -289,6 +289,7 @@ private struct FloatWindowRootView: View {
                 viewModel: viewModel,
                 onFocusSession: onFocusSession
             )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 }

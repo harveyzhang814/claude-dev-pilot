@@ -2,58 +2,41 @@
 import SwiftUI
 import Core
 
-/// Compact float window content: shows one row per active session with status.
-/// Read-only — tap anywhere to expand.
+/// Compact float window: a small dot-per-session status pill.
+/// Dots for waiting sessions pulse slowly to draw peripheral attention.
 struct FloatWindowCompactView: View {
     let sessions: [DevSession]
-    let onExpand: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(sessions) { session in
-                CompactSessionRow(session: session)
-                if session.id != sessions.last?.id {
-                    Divider().padding(.horizontal, 12)
-                }
+        HStack(spacing: 5) {
+            ForEach(Array(sessions.prefix(5))) { session in
+                StatusDot(color: sessionStatusColor(session),
+                          isPulsing: session.status == .waiting)
             }
         }
-        .frame(width: 360)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
         .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .contentShape(Rectangle())
-        .onTapGesture { onExpand() }
+        .clipShape(Capsule())
+        .contentShape(Capsule())
     }
 }
 
-private struct CompactSessionRow: View {
-    let session: DevSession
+private struct StatusDot: View {
+    let color: Color
+    let isPulsing: Bool
+    @State private var animating = false
 
     var body: some View {
-        HStack(spacing: 7) {
-            Circle()
-                .fill(sessionStatusColor(session))
-                .frame(width: 7, height: 7)
-                .accessibilityHidden(true)
-
-            Text(session.project)
-                .font(.callout)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(1)
-
-            Text(sessionStatusTag(session))
-                .font(.caption2)
-                .fontWeight(.medium)
-                .foregroundColor(sessionStatusColor(session))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(sessionStatusColor(session).opacity(0.12))
-                .clipShape(Capsule())
-
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .opacity(isPulsing ? (animating ? 0.2 : 1.0) : 1.0)
+            .onAppear {
+                guard isPulsing else { return }
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    animating = true
+                }
+            }
     }
 }
