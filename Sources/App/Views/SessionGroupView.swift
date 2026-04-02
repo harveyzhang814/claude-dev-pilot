@@ -56,6 +56,9 @@ struct SessionGroupView: View {
                 ) {
                     onDismiss(event.id)
                 }
+                .simultaneousGesture(TapGesture().onEnded {
+                    onFocusSession?(session)
+                })
                 .padding(.horizontal, 8)
                 .padding(.bottom, 4)
             }
