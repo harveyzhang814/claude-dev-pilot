@@ -56,4 +56,53 @@ struct HookLogStoreTests {
         #expect(results[0].hookEventName == "Notification")  // newer first
         #expect(results[1].hookEventName == "Stop")
     }
+
+    @Test("fetchRecent returns logs newest-first up to limit")
+    func fetchRecentOrdered() async throws {
+        let db = try makeDB()
+        let now = Date()
+        for i in 1...3 {
+            let log = HookLog(
+                receivedAt: now.addingTimeInterval(Double(i)),
+                hookEventName: "Stop",
+                sessionId: "sess-\(i)",
+                notificationType: nil,
+                rawPayload: "{}"
+            )
+            try HookLogStore.insert(log, in: db)
+        }
+
+        let results = try HookLogStore.fetchRecent(limit: 2, in: db)
+        #expect(results.count == 2)
+        #expect(results[0].sessionId == "sess-3")  // newest first
+        #expect(results[1].sessionId == "sess-2")
+    }
+
+    @Test("pruneOlderThan deletes old logs, keeps recent")
+    func pruneOlderThan() async throws {
+        let db = try makeDB()
+        let old = HookLog(
+            receivedAt: Date(timeIntervalSinceNow: -40 * 24 * 3600),  // 40 days ago
+            hookEventName: "SessionStart",
+            sessionId: "sess-old",
+            notificationType: nil,
+            rawPayload: "{}"
+        )
+        let recent = HookLog(
+            receivedAt: Date(),
+            hookEventName: "SessionStart",
+            sessionId: "sess-new",
+            notificationType: nil,
+            rawPayload: "{}"
+        )
+        try HookLogStore.insert(old, in: db)
+        try HookLogStore.insert(recent, in: db)
+
+        let deleted = try HookLogStore.pruneOlderThan(days: 30, in: db)
+        #expect(deleted == 1)
+
+        let remaining = try HookLogStore.fetchRecent(limit: 10, in: db)
+        #expect(remaining.count == 1)
+        #expect(remaining[0].sessionId == "sess-new")
+    }
 }
