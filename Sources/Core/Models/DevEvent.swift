@@ -10,6 +10,7 @@ public enum EventType: String, Codable, Sendable, DatabaseValueConvertible {
 
 public enum AttentionTier: String, Codable, Sendable, DatabaseValueConvertible {
     case action      // permissionNeeded → red badge, native notification
+    case review      // idle-ready → green card in popover, no badge
     case background  // all others → session panel only, no popover card
 }
 

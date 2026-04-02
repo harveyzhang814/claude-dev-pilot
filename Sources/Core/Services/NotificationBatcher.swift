@@ -13,6 +13,17 @@ public final class NotificationBatcher: @unchecked Sendable {
         public let isSummary: Bool
         public let title: String
         public let body: String
+
+        public init(event: DevEvent?, sessionId: String, eventCount: Int,
+                    isBatched: Bool, isSummary: Bool, title: String, body: String) {
+            self.event = event
+            self.sessionId = sessionId
+            self.eventCount = eventCount
+            self.isBatched = isBatched
+            self.isSummary = isSummary
+            self.title = title
+            self.body = body
+        }
     }
 
     private let batchThreshold = 3
@@ -30,6 +41,20 @@ public final class NotificationBatcher: @unchecked Sendable {
     public init(globalMaxPerWindow: Int = 5, onNotification: @escaping (Notification) -> Void) {
         self.globalMaxPerWindow = globalMaxPerWindow
         self.onNotification = onNotification
+    }
+
+    /// Directly emits an idle notification for a session, bypassing batch accumulation.
+    /// Respects global rate limiting.
+    public func submitIdle(sessionId: String, project: String) {
+        emitNotification(Notification(
+            event: nil,
+            sessionId: sessionId,
+            eventCount: 1,
+            isBatched: false,
+            isSummary: false,
+            title: project,
+            body: "Claude is ready"
+        ))
     }
 
     public func submit(_ event: DevEvent) {
