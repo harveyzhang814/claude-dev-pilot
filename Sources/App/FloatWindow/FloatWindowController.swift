@@ -124,8 +124,8 @@ final class FloatWindowController: NSObject {
         switch state {
         case .hidden:   return 1
         case .compact:
-            let count = min(max(viewModel.recentEvents.count, 1), 5)
-            return CGFloat(count) * 52
+            let count = min(max(viewModel.activeSessions.count, 1), 5)
+            return CGFloat(count) * 36
         case .expanded: return 480
         }
     }
@@ -228,7 +228,7 @@ private struct FloatWindowRootView: View {
             Color.clear.frame(width: 1, height: 1)
         case .compact:
             FloatWindowCompactView(
-                events: Array(viewModel.recentEvents.prefix(5)),
+                sessions: Array(viewModel.activeSessions.prefix(5)),
                 onExpand: onExpand
             )
         case .expanded:
