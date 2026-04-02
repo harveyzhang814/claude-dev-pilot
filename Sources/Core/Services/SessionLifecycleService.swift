@@ -14,11 +14,11 @@ public enum SessionLifecycleService {
             switch payload.hookEventName {
             case "SessionStart":
                 if let session = existing {
-                    // Reopen if closed; always update cwd
+                    // Reopen if closed; always update cwd, tty, and terminalApp
                     if session.status == .completed || session.status == .error || session.status == .stale {
                         try db.execute(
-                            sql: "UPDATE sessions SET status = 'running', ended_at = NULL, cwd = ? WHERE id = ?",
-                            arguments: [payload.cwd, payload.sessionId]
+                            sql: "UPDATE sessions SET status = 'running', ended_at = NULL, cwd = ?, tty = ?, terminal_app = ? WHERE id = ?",
+                            arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.sessionId]
                         )
                     }
                     // If already running/waiting: no-op (idempotent)
@@ -27,6 +27,8 @@ public enum SessionLifecycleService {
                         id: payload.sessionId,
                         project: project,
                         cwd: payload.cwd,
+                        tty: payload.tty,
+                        terminalApp: payload.terminalApp,
                         tool: "claude-code",
                         status: .running,
                         startedAt: Date(),

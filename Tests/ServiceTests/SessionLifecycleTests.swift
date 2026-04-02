@@ -209,4 +209,48 @@ struct SessionLifecycleTests {
         let eventCount = try db.read { db in try DevEvent.fetchCount(db) }
         #expect(eventCount == 0, "SessionEnd must not create DevEvent records")
     }
+
+    @Test("SessionStart stores tty and terminalApp on new session")
+    func sessionStartStoresTtyAndTerminalApp() throws {
+        let db = try makeDB()
+        let payload = HookPayload(
+            sessionId: "tty-test",
+            cwd: "/Users/dev/myapp",
+            hookEventName: "SessionStart",
+            tty: "/dev/ttys003",
+            terminalApp: "ghostty"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "tty-test") }
+        #expect(session?.tty == "/dev/ttys003")
+        #expect(session?.terminalApp == "ghostty")
+    }
+
+    @Test("SessionStart updates tty and terminalApp on reopen")
+    func sessionStartUpdatesTtyOnReopen() throws {
+        let db = try makeDB()
+        // Pre-insert a completed session without tty
+        try db.write { db in
+            var s = DevSession(
+                id: "reopen-tty", project: "myapp", cwd: "/Users/dev/myapp",
+                tool: "claude-code", status: .completed,
+                startedAt: Date(), endedAt: Date(), totalTokens: nil, lastEventTitle: nil
+            )
+            try s.insert(db)
+        }
+        let payload = HookPayload(
+            sessionId: "reopen-tty",
+            cwd: "/Users/dev/myapp",
+            hookEventName: "SessionStart",
+            tty: "/dev/ttys007",
+            terminalApp: "Apple_Terminal"
+        )
+        try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+
+        let session = try db.read { db in try DevSession.fetchOne(db, key: "reopen-tty") }
+        #expect(session?.status == .running)
+        #expect(session?.tty == "/dev/ttys007")
+        #expect(session?.terminalApp == "Apple_Terminal")
+    }
 }
