@@ -9,11 +9,15 @@ public final class PopoverViewModel {
     public var actionEvents: [DevEvent] = []
     public var recentEvents: [DevEvent] = []
     public var actionCount: Int = 0
+    public var activeSessionCount: Int = 0
+    private(set) var sessionStartTimes: [String: Date] = [:]
 
     private var cancellables: Set<AnyCancellable> = []
     private var db: (any DatabaseReader & DatabaseWriter)?
 
     public init() {}
+
+    public func sessionStartedAt(for sessionId: String) -> Date? { sessionStartTimes[sessionId] }
 
     public func dismiss(eventId: String) {
         guard let db else { return }
@@ -67,6 +71,43 @@ public final class PopoverViewModel {
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] events in
                     self?.recentEvents = events
+                }
+            )
+            .store(in: &cancellables)
+
+        let sessionCountObservation = ValueObservation.tracking { db in
+            try DevSession
+                .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue]
+                    .contains(DevSession.Columns.status))
+                .fetchCount(db)
+        }
+
+        sessionCountObservation
+            .publisher(in: db, scheduling: .immediate)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { [weak self] count in
+                    self?.activeSessionCount = count
+                }
+            )
+            .store(in: &cancellables)
+
+        let sessionTimesObservation = ValueObservation.tracking { db in
+            try DevSession
+                .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue]
+                    .contains(DevSession.Columns.status))
+                .fetchAll(db)
+                .reduce(into: [String: Date]()) { $0[$1.id] = $1.startedAt }
+        }
+
+        sessionTimesObservation
+            .publisher(in: db, scheduling: .immediate)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { [weak self] times in
+                    self?.sessionStartTimes = times
                 }
             )
             .store(in: &cancellables)
