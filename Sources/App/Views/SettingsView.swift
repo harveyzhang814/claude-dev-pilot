@@ -10,6 +10,7 @@ struct SettingsView: View {
 
     @State private var showRecentPayloads: Bool = false
     @State private var recentPayloads: [String] = []
+    @State private var promptCopied: Bool = false
 
     var body: some View {
         Form {
@@ -46,6 +47,38 @@ struct SettingsView: View {
             Section("General") {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                 Toggle("Session panel always on top", isOn: $alwaysOnTop)
+            }
+
+            // Setup section
+            Section("Claude Code Hooks") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Paste this into any Claude Code session to register the Notification, SessionStart, and SessionEnd hooks:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ScrollView {
+                        Text(HookInstaller.claudeCodePrompt())
+                            .font(.system(.caption2, design: .monospaced))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 100)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(6)
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(HookInstaller.claudeCodePrompt(), forType: .string)
+                        promptCopied = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            promptCopied = false
+                        }
+                    } label: {
+                        Label(promptCopied ? "Copied!" : "Copy Prompt", systemImage: promptCopied ? "checkmark" : "doc.on.doc")
+                    }
+                }
             }
 
             // Debug section

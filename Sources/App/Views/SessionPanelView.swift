@@ -5,6 +5,7 @@ struct SessionPanelView: View {
     let viewModel: SessionPanelViewModel
     @AppStorage("alwaysOnTop") private var alwaysOnTop: Bool = false
     @State private var staleExpanded: Bool = false
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,7 +34,7 @@ struct SessionPanelView: View {
                     }
 
                 Button {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                    openSettings()
                 } label: {
                     Image(systemName: "gearshape")
                         .imageScale(.medium)
