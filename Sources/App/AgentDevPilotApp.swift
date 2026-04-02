@@ -16,8 +16,11 @@ struct AgentDevPilotApp: App {
                 } else {
                     MenubarPopover(
                         viewModel: appState.popoverViewModel,
-                        onOpenTerminal: { path in
-                            openTerminal(at: path)
+                        onFocusSession: { session in
+                            let result = TerminalFocusService.focus(session: session)
+                            if result == .notFound {
+                                openTerminal(at: session.cwd ?? "")
+                            }
                         }
                     )
                 }
@@ -29,7 +32,7 @@ struct AgentDevPilotApp: App {
             if appState.popoverViewModel.actionCount > 0 {
                 Image(systemName: "bell.badge.fill")
             } else {
-                Image(systemName: "bell")
+                Image(systemName: "bell.fill")
             }
         }
         .menuBarExtraStyle(.window)

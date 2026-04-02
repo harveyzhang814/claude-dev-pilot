@@ -4,7 +4,6 @@ import Core
 struct EventCardView: View {
     let event: DevEvent
     var sessionLabel: String? = nil
-    var onOpenTerminal: ((String) -> Void)?
     var onDismiss: (() -> Void)?
 
     @State private var dragOffset: CGFloat = 0
@@ -95,16 +94,7 @@ struct EventCardView: View {
                         .font(.callout)
                         .lineLimit(2)
 
-                    // Action button below title for permission/error events
-                    if event.attentionTier == .action || event.type == .taskError {
-                        Button("Open Terminal") {
-                            onOpenTerminal?(event.detail ?? "")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                        .accessibilityLabel("Open terminal for \(event.title)")
-                        .padding(.top, 2)
-                    }
+
                 }
 
                 Spacer()
