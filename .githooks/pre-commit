@@ -1,0 +1,39 @@
+#!/bin/sh
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+[ -z "$BRANCH" ] && exit 0
+
+IS_MERGE=0
+[ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ] && IS_MERGE=1
+
+merge_source_branch() {
+    local msg_file
+    msg_file="$(git rev-parse --git-dir)/MERGE_MSG"
+    [ -f "$msg_file" ] || { echo ""; return; }
+    head -1 "$msg_file" | sed "s/Merge branch '//;s/'.*//"
+}
+
+if [ "$BRANCH" = "main" ]; then
+    if [ "$IS_MERGE" -eq 0 ]; then
+        echo "❌ 禁止直接在 main 上提交。请在 staging 或 release/* 分支开发后合并。"
+        exit 1
+    fi
+    SRC=$(merge_source_branch)
+    case "$SRC" in
+        staging|release/*) exit 0 ;;
+        *) echo "❌ main 只接受来自 staging 或 release/* 的合并，当前来源：'${SRC:-unknown}'"; exit 1 ;;
+    esac
+fi
+
+if [ "$BRANCH" = "staging" ]; then
+    if [ "$IS_MERGE" -eq 0 ]; then
+        echo "❌ 禁止直接在 staging 上提交。请在 feature/*, fix/*, chore/*, doc/* 分支开发后合并。"
+        exit 1
+    fi
+    SRC=$(merge_source_branch)
+    case "$SRC" in
+        feature/*|fix/*|chore/*|doc/*) exit 0 ;;
+        *) echo "❌ staging 只接受来自 feature/*, fix/*, chore/*, doc/* 的合并，当前来源：'${SRC:-unknown}'"; exit 1 ;;
+    esac
+fi
+
+exit 0
