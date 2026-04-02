@@ -45,7 +45,11 @@ public enum EventStore {
         limit: Int = 5,
         in db: Database
     ) throws -> [String: [DevEvent]] {
-        guard !sessionIds.isEmpty else { return [:] }
+        // Always read events table so GRDB tracks it in ValueObservation
+        guard !sessionIds.isEmpty else {
+            _ = try DevEvent.fetchCount(db)  // register table access
+            return [:]
+        }
         let events = try DevEvent
             .filter(sessionIds.contains(DevEvent.Columns.sessionId))
             .filter(DevEvent.Columns.attentionTier != AttentionTier.background.rawValue)

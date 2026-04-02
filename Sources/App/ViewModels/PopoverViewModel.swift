@@ -77,46 +77,29 @@ public final class PopoverViewModel {
             )
             .store(in: &cancellables)
 
-        // Single observation: active sessions sorted by startedAt desc
-        let sessionObservation = ValueObservation.tracking { db in
-            try DevSession
+        // Single merged observation: active sessions + their grouped events (atomic)
+        let activeSessionsAndEventsObservation = ValueObservation.tracking { db -> ([DevSession], [String: [DevEvent]]) in
+            let sessions = try DevSession
                 .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue]
                     .contains(DevSession.Columns.status))
                 .order(DevSession.Columns.startedAt.desc)
                 .fetchAll(db)
+            let sessionIds = sessions.map(\.id)
+            let grouped = try EventStore.fetchGroupedBySession(sessionIds: sessionIds, in: db)
+            return (sessions, grouped)
         }
 
-        sessionObservation
+        activeSessionsAndEventsObservation
             .publisher(in: db, scheduling: .immediate)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { _ in },
-                receiveValue: { [weak self] sessions in
+                receiveValue: { [weak self] (sessions, grouped) in
                     guard let self else { return }
                     self.activeSessions = sessions
                     self.activeSessionCount = sessions.count
                     self.sessionStartTimes = sessions.reduce(into: [:]) { $0[$1.id] = $1.startedAt }
-                }
-            )
-            .store(in: &cancellables)
-
-        // Events grouped by active session
-        let eventsGroupedObservation = ValueObservation.tracking { db in
-            let sessionIds = try DevSession
-                .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue]
-                    .contains(DevSession.Columns.status))
-                .fetchAll(db)
-                .map(\.id)
-            return try EventStore.fetchGroupedBySession(sessionIds: sessionIds, in: db)
-        }
-
-        eventsGroupedObservation
-            .publisher(in: db, scheduling: .immediate)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { [weak self] grouped in
-                    self?.eventsBySession = grouped
+                    self.eventsBySession = grouped
                 }
             )
             .store(in: &cancellables)
