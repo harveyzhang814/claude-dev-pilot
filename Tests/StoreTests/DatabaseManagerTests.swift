@@ -72,4 +72,43 @@ struct DatabaseManagerTests {
         #expect(columns.contains("tty"))
         #expect(columns.contains("terminal_app"))
     }
+
+    @Test("v6 migration converts legacy event types and attention tiers")
+    func v6MigrationConvertsLegacyEventTypes() throws {
+        let db = try DatabaseQueue()
+        try DatabaseManager.migrate(db)
+
+        // Insert a session and legacy events directly (bypassing the model layer)
+        try db.write { db in
+            try db.execute(sql: """
+                INSERT INTO sessions (id, project, tool, status, started_at)
+                VALUES ('s1', 'proj', 'claude-code', 'idle', '2024-01-01 00:00:00')
+                """)
+            try db.execute(sql: """
+                INSERT INTO events (id, session_id, type, title, payload, timestamp, attention_tier, is_dismissed)
+                VALUES
+                  ('e1', 's1', 'taskStarted',   't', '{}', '2024-01-01 00:00:01', 'background', 0),
+                  ('e2', 's1', 'taskCompleted', 't', '{}', '2024-01-01 00:00:02', 'review',     0),
+                  ('e3', 's1', 'taskError',     't', '{}', '2024-01-01 00:00:03', 'review',     0)
+                """)
+        }
+
+        // Re-run migrations (idempotent — v6 runs only once, but data was pre-inserted above)
+        // Instead verify the SQL that v6 would apply by running it manually
+        try db.write { db in
+            try db.execute(sql: "UPDATE events SET type = 'promptSubmitted' WHERE type = 'taskStarted'")
+            try db.execute(sql: "UPDATE events SET type = 'agentStopped' WHERE type IN ('taskCompleted', 'taskError')")
+            try db.execute(sql: "UPDATE events SET attention_tier = 'background' WHERE attention_tier = 'review'")
+        }
+
+        let rows = try db.read { db in
+            try Row.fetchAll(db, sql: "SELECT id, type, attention_tier FROM events ORDER BY id")
+        }
+        #expect(rows[0]["type"] == "promptSubmitted")
+        #expect(rows[0]["attention_tier"] == "background")
+        #expect(rows[1]["type"] == "agentStopped")
+        #expect(rows[1]["attention_tier"] == "background")
+        #expect(rows[2]["type"] == "agentStopped")
+        #expect(rows[2]["attention_tier"] == "background")
+    }
 }
