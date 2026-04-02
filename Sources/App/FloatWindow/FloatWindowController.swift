@@ -5,7 +5,7 @@ import Core
 
 /// Owns the floating NSPanel and drives the hidden/compact/expanded state machine.
 @MainActor
-final class FloatWindowController: NSObject {
+final class FloatWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Public
 
@@ -27,6 +27,7 @@ final class FloatWindowController: NSObject {
         isObserving = false
         collapseTimer?.invalidate()
         collapseTimer = nil
+        pinnedTopY = nil
         panel.orderOut(nil)
     }
 
@@ -48,10 +49,13 @@ final class FloatWindowController: NSObject {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        panel.isMovable = true
+        panel.isMovableByWindowBackground = true
         self.panel = panel
 
         super.init()
 
+        panel.delegate = self
         setupContentView()
         startObserving()
     }
@@ -67,6 +71,9 @@ final class FloatWindowController: NSObject {
     private var collapseTimer: Timer?
     private var isObserving = true
     private var hostingView: NSHostingView<FloatWindowRootView>!
+    /// Top edge of the panel in screen coordinates. Saved across drags so
+    /// compact↔expanded transitions only change height, not position.
+    private var pinnedTopY: CGFloat?
 
     // MARK: - Setup
 
@@ -131,14 +138,30 @@ final class FloatWindowController: NSObject {
     }
 
     private func positionPanel(height: CGFloat, animated: Bool) {
-        // NSScreen.screens.first is always the screen containing the menu bar (per Apple docs).
-        let screen = NSScreen.screens.first ?? NSScreen.main
-        guard let screen else { return }
-        let visible = screen.visibleFrame
-        let x = screen.frame.midX - 180
-        let y = visible.maxY - height
-        let newFrame = NSRect(x: x, y: y, width: 360, height: height)
+        let originX: CGFloat
+        let topY: CGFloat
 
+        if let pinned = pinnedTopY {
+            // Already positioned (first show done or user dragged) — keep x and top edge.
+            originX = panel.frame.origin.x
+            topY = pinned
+        } else {
+            // First show: use saved position or default to top center below menubar.
+            let savedTopY = UserDefaults.standard.double(forKey: "floatWindowTopY")
+            if savedTopY > 0 {
+                originX = UserDefaults.standard.double(forKey: "floatWindowX")
+                topY = savedTopY
+            } else {
+                // NSScreen.screens.first is always the screen containing the menu bar (per Apple docs).
+                let screen = NSScreen.screens.first ?? NSScreen.main
+                guard let screen else { return }
+                originX = screen.frame.midX - 180
+                topY = screen.visibleFrame.maxY
+            }
+            pinnedTopY = topY
+        }
+
+        let newFrame = NSRect(x: originX, y: topY - height, width: 360, height: height)
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
@@ -147,6 +170,18 @@ final class FloatWindowController: NSObject {
             }
         } else {
             panel.setFrame(newFrame, display: true)
+        }
+    }
+
+    // MARK: - NSWindowDelegate
+
+    nonisolated func windowDidMove(_ notification: Notification) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Update pinnedTopY to the new top edge after dragging.
+            self.pinnedTopY = self.panel.frame.maxY
+            UserDefaults.standard.set(self.panel.frame.origin.x, forKey: "floatWindowX")
+            UserDefaults.standard.set(self.panel.frame.maxY, forKey: "floatWindowTopY")
         }
     }
 
