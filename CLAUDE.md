@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git workflow
+
+Before starting any new feature or bug fix, always create a new branch from `staging`:
+
+```bash
+git fetch origin
+git checkout staging
+git pull origin staging
+git checkout -b feat/short-description   # or fix/short-description
+```
+
+- Features → `feat/<short-description>`
+- Bug fixes → `fix/<short-description>`
+- Never commit directly to `staging` or `main`
+- Each independent piece of work gets its own branch
+
 ## Commands
 
 ```bash
