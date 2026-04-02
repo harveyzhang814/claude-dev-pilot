@@ -29,7 +29,7 @@ enum EventHandler {
                 notificationType: nil,
                 rawPayload: rawPayload
             )
-            try? HookLogStore.insert(log, in: db)
+            try? await db.write { db in try log.insert(db) }
 
             // Parse HookPayload
             let payload: HookPayload
