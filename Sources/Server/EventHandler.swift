@@ -17,13 +17,45 @@ enum EventHandler {
             // Collect body (max 64 KB)
             let buffer = try await request.body.collect(upTo: 64 * 1024)
             let data = Data(buffer: buffer)
+            let rawPayload = String(data: data, encoding: .utf8) ?? "[non-UTF-8 body]"
+
+            // Insert preliminary log before any business logic
+            let logId = UUID().uuidString
+            let log = HookLog(
+                id: logId,
+                receivedAt: Date(),
+                hookEventName: "UNKNOWN",
+                sessionId: "",
+                notificationType: nil,
+                rawPayload: rawPayload
+            )
+            try? HookLogStore.insert(log, in: db)
 
             // Parse HookPayload
             let payload: HookPayload
             do {
                 payload = try JSONDecoder().decode(HookPayload.self, from: data)
             } catch {
+                try? await db.write { db in
+                    try db.execute(
+                        sql: "UPDATE hook_logs SET hook_event_name = 'PARSE_ERROR' WHERE id = ?",
+                        arguments: [logId]
+                    )
+                }
                 throw HTTPError(.badRequest, message: "Invalid JSON payload: \(error.localizedDescription)")
+            }
+
+            // Update log with decoded fields
+            try? await db.write { db in
+                try db.execute(
+                    sql: """
+                        UPDATE hook_logs
+                        SET hook_event_name = ?, session_id = ?, notification_type = ?
+                        WHERE id = ?
+                        """,
+                    arguments: [payload.hookEventName, payload.sessionId,
+                                payload.notificationType, logId]
+                )
             }
 
             // SessionStart / SessionEnd → lifecycle only, no DevEvent
@@ -36,17 +68,15 @@ enum EventHandler {
             let event = EventMapper.map(payload)
             try SessionLifecycleService.processEvent(event, sessionTitle: payload.title, in: db)
 
-            // Feed Stop and Notification events into the stop window for coalesced state resolution
+            // Feed Stop and Notification events into the stop window
             switch payload.hookEventName {
             case "Stop":
                 await stopWindow.recordStop(sessionId: payload.sessionId)
             case "Notification":
                 switch payload.notificationType {
                 case "permission_prompt", "elicitation_dialog":
-                    // Permission notifications: set hasNotification → window resolves to waiting
                     await stopWindow.recordNotification(sessionId: payload.sessionId)
                 case "idle_prompt":
-                    // idle_prompt behaves like Stop: extends the window but resolves to idle
                     await stopWindow.recordStop(sessionId: payload.sessionId)
                 default:
                     break

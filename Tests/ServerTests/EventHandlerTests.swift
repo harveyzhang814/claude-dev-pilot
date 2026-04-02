@@ -136,6 +136,97 @@ struct EventHandlerTests {
         }
     }
 
+    @Test("POST /event logs a HookLog row for Notification hook")
+    func postEventLogsHookLog() async throws {
+        let (app, db) = try makeApp()
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: validPayload())
+            _ = try await client.execute(
+                uri: "/event",
+                method: .post,
+                headers: [.authorization: "Bearer test-token"],
+                body: body
+            )
+        }
+        let logs = try await db.read { try HookLog.fetchAll($0) }
+        #expect(logs.count == 1)
+        #expect(logs[0].hookEventName == "Notification")
+        #expect(logs[0].sessionId == "abc123")
+        #expect(logs[0].notificationType == nil)
+        #expect(logs[0].rawPayload.contains("abc123"))
+    }
+
+    @Test("POST /event logs PARSE_ERROR for malformed JSON")
+    func postEventLogsParseError() async throws {
+        let (app, db) = try makeApp()
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: "not valid json {{{")
+            _ = try await client.execute(
+                uri: "/event",
+                method: .post,
+                headers: [.authorization: "Bearer test-token"],
+                body: body
+            )
+        }
+        let logs = try await db.read { try HookLog.fetchAll($0) }
+        #expect(logs.count == 1)
+        #expect(logs[0].hookEventName == "PARSE_ERROR")
+        #expect(logs[0].sessionId == "")
+        #expect(logs[0].rawPayload == "not valid json {{{")
+    }
+
+    @Test("POST /event with SessionStart logs a HookLog row")
+    func postEventSessionStartLogsHookLog() async throws {
+        let (app, db) = try makeApp()
+        try await app.test(.router) { client in
+            let payload = """
+            {
+              "session_id": "sess-log-001",
+              "cwd": "/Users/test/myproject",
+              "hook_event_name": "SessionStart"
+            }
+            """
+            _ = try await client.execute(
+                uri: "/event",
+                method: .post,
+                headers: [.authorization: "Bearer test-token"],
+                body: ByteBuffer(string: payload)
+            )
+        }
+        let logs = try await db.read {
+            try HookLog.filter(HookLog.Columns.sessionId == "sess-log-001").fetchAll($0)
+        }
+        #expect(logs.count == 1)
+        #expect(logs[0].hookEventName == "SessionStart")
+    }
+
+    @Test("POST /event with Notification permission_prompt logs notificationType")
+    func postEventLogsNotificationType() async throws {
+        let (app, db) = try makeApp()
+        let payload = """
+        {
+          "session_id": "sess-perm-001",
+          "cwd": "/Users/test/myproject",
+          "hook_event_name": "Notification",
+          "message": "Permission required",
+          "notification_type": "permission_prompt"
+        }
+        """
+        try await app.test(.router) { client in
+            _ = try await client.execute(
+                uri: "/event",
+                method: .post,
+                headers: [.authorization: "Bearer test-token"],
+                body: ByteBuffer(string: payload)
+            )
+        }
+        let logs = try await db.read {
+            try HookLog.filter(HookLog.Columns.sessionId == "sess-perm-001").fetchAll($0)
+        }
+        #expect(logs.count == 1)
+        #expect(logs[0].notificationType == "permission_prompt")
+    }
+
     @Test("POST /event with SessionEnd returns 200, no DevEvent, session marked completed")
     func postEventSessionEnd() async throws {
         let (app, db) = try makeApp()
