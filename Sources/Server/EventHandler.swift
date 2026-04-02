@@ -42,8 +42,12 @@ enum EventHandler {
                 await stopWindow.recordStop(sessionId: payload.sessionId)
             case "Notification":
                 switch payload.notificationType {
-                case "permission_prompt", "elicitation_dialog", "idle_prompt":
+                case "permission_prompt", "elicitation_dialog":
+                    // Permission notifications: set hasNotification → window resolves to waiting
                     await stopWindow.recordNotification(sessionId: payload.sessionId)
+                case "idle_prompt":
+                    // idle_prompt behaves like Stop: extends the window but resolves to idle
+                    await stopWindow.recordStop(sessionId: payload.sessionId)
                 default:
                     break
                 }

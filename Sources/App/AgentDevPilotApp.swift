@@ -21,14 +21,19 @@ struct AgentDevPilotApp: App {
                     )
                 }
             }
+        } label: {
+            Group {
+                if appState.popoverViewModel.actionCount > 0 {
+                    Image(systemName: "bell.badge.fill")
+                } else {
+                    Image(systemName: "bell.fill")
+                }
+            }
+            // Start the HTTP server and DB on app launch — the label is always
+            // visible in the menu bar, so this task fires immediately without
+            // requiring the user to click the icon first.
             .task {
                 await appState.start()
-            }
-        } label: {
-            if appState.popoverViewModel.actionCount > 0 {
-                Image(systemName: "bell.badge.fill")
-            } else {
-                Image(systemName: "bell.fill")
             }
         }
         .menuBarExtraStyle(.window)
