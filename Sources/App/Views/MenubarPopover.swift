@@ -8,79 +8,50 @@ struct MenubarPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if viewModel.activeSessionCount > 0 {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 7, height: 7)
-                    Text("\(viewModel.activeSessionCount) active session\(viewModel.activeSessionCount == 1 ? "" : "s")")
-                        .font(.caption2)
+            if viewModel.activeSessions.isEmpty {
+                // Empty state
+                VStack(spacing: 8) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 32))
                         .foregroundColor(.secondary)
-                    Spacer()
+                        .opacity(0.25)
+                        .accessibilityHidden(true)
+                    Text("No active sessions")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                    Text("Start Claude Code in any project\nto see it here.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 2)
-            }
-
-            // Needs Attention section
-            SectionHeader(title: "Needs Attention", count: viewModel.actionEvents.isEmpty ? nil : viewModel.actionEvents.count)
-
-            if viewModel.actionEvents.isEmpty {
-                Text("All clear. No sessions need you right now.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 36)
             } else {
-                ForEach(viewModel.actionEvents) { event in
-                    EventCardView(
-                        event: event,
-                        sessionLabel: viewModel.activeSessionCount > 1
-                            ? viewModel.sessionStartedAt(for: event.sessionId).map { sessionAgeLabel($0) }
-                            : nil,
-                        onOpenTerminal: onOpenTerminal
-                    ) {
-                        viewModel.dismiss(eventId: event.id)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(viewModel.activeSessions.enumerated()), id: \.element.id) { index, session in
+                            if index > 0 {
+                                Divider()
+                                    .padding(.vertical, 2)
+                            }
+                            SessionGroupView(
+                                session: session,
+                                events: viewModel.eventsBySession[session.id] ?? [],
+                                onOpenTerminal: onOpenTerminal
+                            ) { eventId in
+                                viewModel.dismiss(eventId: eventId)
+                            }
+                        }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 4)
                 }
-            }
-
-            Divider()
-                .padding(.vertical, 4)
-
-            // Recent Activity section
-            SectionHeader(title: "Recent Activity", count: nil)
-
-            if viewModel.recentEvents.isEmpty {
-                Text("No events yet. Start a Claude Code session to see activity here.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-            } else {
-                ForEach(viewModel.recentEvents.prefix(10)) { event in
-                    EventCardView(
-                        event: event,
-                        sessionLabel: viewModel.activeSessionCount > 1
-                            ? viewModel.sessionStartedAt(for: event.sessionId).map { sessionAgeLabel($0) }
-                            : nil,
-                        onOpenTerminal: onOpenTerminal
-                    ) {
-                        viewModel.dismiss(eventId: event.id)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 4)
-                }
+                .frame(maxHeight: 420)
             }
 
             Divider()
 
             // Footer
             HStack {
-                Button("Open Session Panel") {
+                Button("Session Panel") {
                     openWindow(id: "session-panel")
                 }
                 .buttonStyle(.plain)
@@ -99,40 +70,5 @@ struct MenubarPopover: View {
         }
         .frame(width: 360)
         .background(Color(NSColor.windowBackgroundColor))
-    }
-}
-
-private func sessionAgeLabel(_ date: Date) -> String {
-    let s = Int(-date.timeIntervalSinceNow)
-    if s < 60 { return "started just now" }
-    if s < 3600 { return "started \(s / 60)m ago" }
-    return "started \(s / 3600)h ago"
-}
-
-private struct SectionHeader: View {
-    let title: String
-    let count: Int?
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.headline)
-                .foregroundColor(.primary)
-
-            if let count {
-                Text("\(count)")
-                    .font(.caption)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.red)
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
     }
 }
