@@ -11,6 +11,8 @@ public final class PopoverViewModel {
     public var actionCount: Int = 0
     public var activeSessionCount: Int = 0
     private(set) var sessionStartTimes: [String: Date] = [:]
+    public var activeSessions: [DevSession] = []
+    public var eventsBySession: [String: [DevEvent]] = [:]
 
     private var cancellables: Set<AnyCancellable> = []
     private var db: (any DatabaseReader & DatabaseWriter)?
@@ -75,39 +77,46 @@ public final class PopoverViewModel {
             )
             .store(in: &cancellables)
 
-        let sessionCountObservation = ValueObservation.tracking { db in
+        // Single observation: active sessions sorted by startedAt desc
+        let sessionObservation = ValueObservation.tracking { db in
             try DevSession
                 .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue]
                     .contains(DevSession.Columns.status))
-                .fetchCount(db)
+                .order(DevSession.Columns.startedAt.desc)
+                .fetchAll(db)
         }
 
-        sessionCountObservation
+        sessionObservation
             .publisher(in: db, scheduling: .immediate)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { _ in },
-                receiveValue: { [weak self] count in
-                    self?.activeSessionCount = count
+                receiveValue: { [weak self] sessions in
+                    guard let self else { return }
+                    self.activeSessions = sessions
+                    self.activeSessionCount = sessions.count
+                    self.sessionStartTimes = sessions.reduce(into: [:]) { $0[$1.id] = $1.startedAt }
                 }
             )
             .store(in: &cancellables)
 
-        let sessionTimesObservation = ValueObservation.tracking { db in
-            try DevSession
+        // Events grouped by active session
+        let eventsGroupedObservation = ValueObservation.tracking { db in
+            let sessionIds = try DevSession
                 .filter([SessionStatus.running.rawValue, SessionStatus.waiting.rawValue]
                     .contains(DevSession.Columns.status))
                 .fetchAll(db)
-                .reduce(into: [String: Date]()) { $0[$1.id] = $1.startedAt }
+                .map(\.id)
+            return try EventStore.fetchGroupedBySession(sessionIds: sessionIds, in: db)
         }
 
-        sessionTimesObservation
+        eventsGroupedObservation
             .publisher(in: db, scheduling: .immediate)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { _ in },
-                receiveValue: { [weak self] times in
-                    self?.sessionStartTimes = times
+                receiveValue: { [weak self] grouped in
+                    self?.eventsBySession = grouped
                 }
             )
             .store(in: &cancellables)
