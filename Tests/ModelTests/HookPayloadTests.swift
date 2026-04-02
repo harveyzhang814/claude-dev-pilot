@@ -101,6 +101,8 @@ struct HookPayloadTests {
         let payload = try JSONDecoder().decode(HookPayload.self, from: json)
         #expect(payload.hookEventName == "SessionEnd")
         #expect(payload.message == "")
+        #expect(payload.source == nil)
+        #expect(payload.model == nil)
     }
 
     @Test("Unknown fields are ignored")

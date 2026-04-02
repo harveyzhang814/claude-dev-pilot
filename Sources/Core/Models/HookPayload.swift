@@ -32,13 +32,13 @@ public struct HookPayload: Codable, Sendable {
         sessionId = try c.decode(String.self, forKey: .sessionId)
         cwd = try c.decode(String.self, forKey: .cwd)
         hookEventName = try c.decode(String.self, forKey: .hookEventName)
-        message = (try? c.decodeIfPresent(String.self, forKey: .message)) ?? ""
-        transcriptPath = try? c.decodeIfPresent(String.self, forKey: .transcriptPath)
-        title = try? c.decodeIfPresent(String.self, forKey: .title)
-        notificationType = try? c.decodeIfPresent(String.self, forKey: .notificationType)
-        permissionMode = try? c.decodeIfPresent(String.self, forKey: .permissionMode)
-        source = try? c.decodeIfPresent(String.self, forKey: .source)
-        model = try? c.decodeIfPresent(String.self, forKey: .model)
+        message = (try c.decodeIfPresent(String.self, forKey: .message)) ?? ""
+        transcriptPath = try c.decodeIfPresent(String.self, forKey: .transcriptPath)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        notificationType = try c.decodeIfPresent(String.self, forKey: .notificationType)
+        permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
+        source = try c.decodeIfPresent(String.self, forKey: .source)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
     }
 
     public init(
