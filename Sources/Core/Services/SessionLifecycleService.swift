@@ -101,13 +101,14 @@ public enum SessionLifecycleService {
                 }
 
                 switch event.type {
-                case .promptSubmitted:
+                case .promptSubmitted, .authSuccess:
+                    // Both are forms of user input that unblock Claude — Claude resumes executing.
+                    // authSuccess = user approved a permission prompt; semantically identical to
+                    // promptSubmitted from the state machine's perspective.
                     try db.execute(
                         sql: "UPDATE sessions SET status = 'busy' WHERE id = ?",
                         arguments: [event.sessionId]
                     )
-                    // User submitted a new prompt — auto-dismiss all prior notifications
-                    // for this session (they've implicitly acknowledged them by continuing)
                     try db.execute(
                         sql: "UPDATE events SET is_dismissed = 1 WHERE session_id = ? AND is_dismissed = 0",
                         arguments: [event.sessionId]
@@ -117,7 +118,7 @@ public enum SessionLifecycleService {
                         sql: "UPDATE sessions SET status = 'waiting' WHERE id = ?",
                         arguments: [event.sessionId]
                     )
-                case .agentStopped, .authSuccess:
+                case .agentStopped:
                     break
                 }
 
