@@ -98,6 +98,21 @@ public enum DatabaseManager {
             }
         }
 
+        migrator.registerMigration("v8_hook_logs") { db in
+            try db.create(table: "hook_logs", ifNotExists: true) { t in
+                t.primaryKey("id", .text)
+                t.column("received_at", .text).notNull()
+                t.column("hook_event_name", .text).notNull()
+                t.column("session_id", .text).notNull()
+                t.column("notification_type", .text)
+                t.column("raw_payload", .text).notNull()
+            }
+            try db.create(index: "idx_hook_logs_session", on: "hook_logs",
+                          columns: ["session_id"], ifNotExists: true)
+            try db.create(index: "idx_hook_logs_received_at", on: "hook_logs",
+                          columns: ["received_at"], ifNotExists: true)
+        }
+
         try migrator.migrate(db)
     }
 
