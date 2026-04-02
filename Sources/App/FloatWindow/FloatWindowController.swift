@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 import Core
 
-/// Owns the floating NSPanel and drives the hidden/compact/expanded state machine.
+/// Owns the floating NSPanel and drives the hidden/compact/hover/expanded state machine.
 @MainActor
 final class FloatWindowController: NSObject, NSWindowDelegate {
 
@@ -15,10 +15,10 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         switch currentState {
         case .hidden:
             transition(to: .expanded)
-        case .compact:
+        case .compact, .hover:
             transition(to: .expanded)
         case .expanded:
-            let next: FloatWindowDisplayState.Mode = viewModel.recentEvents.isEmpty ? .hidden : .compact
+            let next: FloatWindowDisplayState.Mode = viewModel.activeSessions.isEmpty ? .hidden : .compact
             transition(to: next)
         }
     }
@@ -62,7 +62,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Private state
 
-    private enum State { case hidden, compact, expanded }
+    private enum State { case hidden, compact, hover, expanded }
 
     private let panel: NSPanel
     private let viewModel: PopoverViewModel
@@ -108,6 +108,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         switch newMode {
         case .hidden:   newState = .hidden
         case .compact:  newState = .compact
+        case .hover:    newState = .hover
         case .expanded: newState = .expanded
         }
 
@@ -133,6 +134,9 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         case .compact:
             let count = min(max(viewModel.activeSessions.count, 1), 5)
             return CGFloat(count) * 36
+        case .hover:
+            let count = min(max(viewModel.activeSessions.count, 1), 5)
+            return CGFloat(count) * 36 + 28  // rows + toolbar
         case .expanded: return 480
         }
     }
@@ -213,6 +217,13 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
                 let h = targetHeight(for: .compact)
                 positionPanel(height: h, animated: true)
             }
+        case .hover:
+            if viewModel.activeSessions.isEmpty {
+                transition(to: .hidden)
+            } else {
+                let h = targetHeight(for: .hover)
+                positionPanel(height: h, animated: true)
+            }
         case .expanded:
             // Don't auto-collapse while expanded; if everything clears, hide
             if !hasSessions && !hasEvents { transition(to: .hidden) }
@@ -223,19 +234,20 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
 
     private func handleMouseEnter() {
         cancelCollapseTimer()
-        if currentState == .compact { transition(to: .expanded) }
+        if currentState == .compact { transition(to: .hover) }
     }
 
     private func handleMouseExit() {
-        if currentState == .expanded { scheduleCollapse() }
+        if currentState == .hover || currentState == .expanded { scheduleCollapse() }
     }
 
     private func scheduleCollapse() {
         cancelCollapseTimer()
         collapseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.isObserving, self.currentState == .expanded else { return }
-                let next: FloatWindowDisplayState.Mode = self.viewModel.recentEvents.isEmpty ? .hidden : .compact
+                guard let self, self.isObserving,
+                      self.currentState == .hover || self.currentState == .expanded else { return }
+                let next: FloatWindowDisplayState.Mode = self.viewModel.activeSessions.isEmpty ? .hidden : .compact
                 self.transition(to: next)
             }
         }
@@ -263,7 +275,13 @@ private struct FloatWindowRootView: View {
             Color.clear.frame(width: 1, height: 1)
         case .compact:
             FloatWindowCompactView(
-                sessions: Array(viewModel.activeSessions.prefix(5)),
+                sessions: Array(viewModel.activeSessions.prefix(5))
+            )
+        case .hover:
+            FloatWindowHoverView(
+                sessions: viewModel.activeSessions,
+                eventsBySession: viewModel.eventsBySession,
+                onFocusSession: onFocusSession,
                 onExpand: onExpand
             )
         case .expanded:
