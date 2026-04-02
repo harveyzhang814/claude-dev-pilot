@@ -1,6 +1,6 @@
 import Core
 
-public enum FocusResult: Equatable {
+enum FocusResult: Equatable {
     case success
     case notFound
 }
