@@ -45,28 +45,29 @@ enum EventHandler {
                 throw HTTPError(.badRequest, message: "Invalid JSON payload: \(error.localizedDescription)")
             }
 
-            guard let payload else { throw HTTPError(.internalServerError) }
+            // payload is guaranteed non-nil here: parseError guard above ensures decode succeeded
+            let decoded = payload!
 
             // SessionStart / SessionEnd → lifecycle only, no DevEvent
-            if payload.hookEventName == "SessionStart" || payload.hookEventName == "SessionEnd" {
-                try SessionLifecycleService.handleSessionLifecycle(payload: payload, in: db)
+            if decoded.hookEventName == "SessionStart" || decoded.hookEventName == "SessionEnd" {
+                try SessionLifecycleService.handleSessionLifecycle(payload: decoded, in: db)
                 return Response(status: .ok, headers: [:], body: .init())
             }
 
             // Map payload → DevEvent and persist
-            let event = EventMapper.map(payload)
-            try SessionLifecycleService.processEvent(event, sessionTitle: payload.title, in: db)
+            let event = EventMapper.map(decoded)
+            try SessionLifecycleService.processEvent(event, sessionTitle: decoded.title, in: db)
 
             // Feed Stop and Notification events into the stop window
-            switch payload.hookEventName {
+            switch decoded.hookEventName {
             case "Stop":
-                await stopWindow.recordStop(sessionId: payload.sessionId)
+                await stopWindow.recordStop(sessionId: decoded.sessionId)
             case "Notification":
-                switch payload.notificationType {
+                switch decoded.notificationType {
                 case "permission_prompt", "elicitation_dialog":
-                    await stopWindow.recordNotification(sessionId: payload.sessionId)
+                    await stopWindow.recordNotification(sessionId: decoded.sessionId)
                 case "idle_prompt":
-                    await stopWindow.recordStop(sessionId: payload.sessionId)
+                    await stopWindow.recordStop(sessionId: decoded.sessionId)
                 default:
                     break
                 }
