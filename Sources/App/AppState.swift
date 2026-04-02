@@ -187,7 +187,6 @@ public final class AppState {
     }
 
     func setFloatWindowMode(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: "floatWindowMode")
         if enabled {
             let handler = focusSessionHandler ?? { _ in }
             let controller = FloatWindowController(
