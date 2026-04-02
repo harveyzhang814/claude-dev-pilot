@@ -31,28 +31,9 @@ public enum EventStore {
 
     public static func dismiss(id: String, in db: any DatabaseWriter) throws {
         try db.write { db in
-            guard let event = try DevEvent.fetchOne(db, key: id) else { return }
-
             try DevEvent
                 .filter(DevEvent.Columns.id == id)
                 .updateAll(db, DevEvent.Columns.isDismissed.set(to: true))
-
-            // If this was an action-tier event, check whether the session still has
-            // any undismissed action events. If not, move it back to running so the
-            // header status reflects reality.
-            if event.attentionTier == .action {
-                let remaining = try DevEvent
-                    .filter(DevEvent.Columns.sessionId == event.sessionId)
-                    .filter(DevEvent.Columns.attentionTier == AttentionTier.action.rawValue)
-                    .filter(DevEvent.Columns.isDismissed == false)
-                    .fetchCount(db)
-                if remaining == 0 {
-                    try db.execute(
-                        sql: "UPDATE sessions SET status = 'running' WHERE id = ? AND status = 'waiting'",
-                        arguments: [event.sessionId]
-                    )
-                }
-            }
         }
     }
 
