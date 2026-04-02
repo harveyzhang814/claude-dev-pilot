@@ -93,6 +93,12 @@ public enum DatabaseManager {
         }
 
         migrator.registerMigration("v7_session_custom_name") { db in
+            // Remove orphan events whose session_id has no matching session row.
+            // Such rows can exist if test data was accidentally inserted directly into
+            // the production database, bypassing GRDB's FK enforcement. They cause the
+            // deferred foreign-key check at transaction commit to fail, preventing the
+            // migration from completing and the app from starting.
+            try db.execute(sql: "DELETE FROM events WHERE session_id NOT IN (SELECT id FROM sessions)")
             try db.alter(table: "sessions") { t in
                 t.add(column: "custom_name", .text)
             }
