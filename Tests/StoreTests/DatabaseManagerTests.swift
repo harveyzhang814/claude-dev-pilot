@@ -61,4 +61,15 @@ struct DatabaseManagerTests {
         try DatabaseManager.migrate(dbQueue)
         try DatabaseManager.migrate(dbQueue)
     }
+
+    @Test("v4 migration adds tty and terminal_app columns")
+    func v4MigrationAddsTtyColumns() throws {
+        let db = try DatabaseQueue()
+        try DatabaseManager.migrate(db)
+        let columns = try db.read { db in
+            try db.columns(in: "sessions").map(\.name)
+        }
+        #expect(columns.contains("tty"))
+        #expect(columns.contains("terminal_app"))
+    }
 }
