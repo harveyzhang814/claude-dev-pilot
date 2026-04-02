@@ -13,6 +13,8 @@ public struct HookPayload: Codable, Sendable {
     public let permissionMode: String?
     public let source: String?        // SessionStart: "startup"|"resume"|"clear"|"compact"
     public let model: String?         // SessionStart: e.g. "claude-sonnet-4-6"
+    public let tty: String?           // e.g. "/dev/ttys003", injected by notify.sh
+    public let terminalApp: String?   // e.g. "ghostty", "Apple_Terminal"
 
     public enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -25,6 +27,8 @@ public struct HookPayload: Codable, Sendable {
         case permissionMode = "permission_mode"
         case source
         case model
+        case tty
+        case terminalApp = "terminal_app"
     }
 
     public init(from decoder: Decoder) throws {
@@ -39,6 +43,8 @@ public struct HookPayload: Codable, Sendable {
         permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
         source = try c.decodeIfPresent(String.self, forKey: .source)
         model = try c.decodeIfPresent(String.self, forKey: .model)
+        tty = try c.decodeIfPresent(String.self, forKey: .tty)
+        terminalApp = try c.decodeIfPresent(String.self, forKey: .terminalApp)
     }
 
     public init(
@@ -51,7 +57,9 @@ public struct HookPayload: Codable, Sendable {
         notificationType: String? = nil,
         permissionMode: String? = nil,
         source: String? = nil,
-        model: String? = nil
+        model: String? = nil,
+        tty: String? = nil,
+        terminalApp: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -63,5 +71,7 @@ public struct HookPayload: Codable, Sendable {
         self.permissionMode = permissionMode
         self.source = source
         self.model = model
+        self.tty = tty
+        self.terminalApp = terminalApp
     }
 }

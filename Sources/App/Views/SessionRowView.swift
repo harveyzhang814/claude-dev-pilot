@@ -3,13 +3,42 @@ import Core
 
 struct SessionRowView: View {
     let session: DevSession
+    var onFocusSession: ((DevSession) -> Void)?
+
+    private var isActive: Bool {
+        session.status == .running || session.status == .waiting
+    }
 
     var body: some View {
+        if isActive {
+            Button {
+                onFocusSession?(session)
+            } label: {
+                rowContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            rowContent
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 10) {
-            // Status indicator — color AND shape, never color alone
-            statusIndicator
-                .frame(width: 14, height: 14)
-                .accessibilityLabel(statusLabel)
+            if isActive {
+                // Capsule status badge — matches SessionGroupView style
+                Text(sessionStatusTag(session))
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(sessionStatusColor(session))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(sessionStatusColor(session).opacity(0.12))
+                    .clipShape(Capsule())
+            } else {
+                statusIndicator
+                    .frame(width: 14, height: 14)
+                    .accessibilityLabel(statusLabel)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.project)
@@ -34,6 +63,12 @@ struct SessionRowView: View {
 
             Spacer()
 
+            if isActive {
+                Text("↗")
+                    .font(.caption2)
+                    .foregroundColor(.secondary.opacity(0.3))
+            }
+
             if let tokens = session.totalTokens {
                 Text(tokenLabel(tokens))
                     .font(.caption2)
@@ -49,13 +84,8 @@ struct SessionRowView: View {
     @ViewBuilder
     private var statusIndicator: some View {
         switch session.status {
-        case .running:
-            Circle()
-                .fill(Color.green)
-        case .waiting:
-            Image(systemName: "triangle.fill")
-                .foregroundColor(.yellow)
-                .imageScale(.small)
+        case .running, .waiting:
+            EmptyView()  // handled by capsule branch above
         case .completed:
             Image(systemName: "checkmark")
                 .foregroundColor(.blue)
@@ -95,7 +125,8 @@ struct SessionRowView: View {
 
     private var rowAccessibilityLabel: String {
         let tokens = session.totalTokens.map { ", \($0) tokens" } ?? ""
-        return "\(session.project), \(session.tool), \(statusLabel), \(elapsedTime)\(tokens)"
+        let focusHint = isActive ? ", tap to focus terminal" : ""
+        return "\(session.project), \(session.tool), \(statusLabel), \(elapsedTime)\(tokens)\(focusHint)"
     }
 }
 

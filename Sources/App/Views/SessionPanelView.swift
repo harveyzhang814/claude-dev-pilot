@@ -3,6 +3,7 @@ import Core
 
 struct SessionPanelView: View {
     let viewModel: SessionPanelViewModel
+    var onFocusSession: ((DevSession) -> Void)?
     @AppStorage("alwaysOnTop") private var alwaysOnTop: Bool = false
     @State private var staleExpanded: Bool = false
     @Environment(\.openSettings) private var openSettings
@@ -70,7 +71,7 @@ struct SessionPanelView: View {
                     if !viewModel.activeSessions.isEmpty {
                         Section("Active") {
                             ForEach(viewModel.activeSessions) { session in
-                                SessionRowView(session: session)
+                                SessionRowView(session: session, onFocusSession: onFocusSession)
                             }
                         }
                     }

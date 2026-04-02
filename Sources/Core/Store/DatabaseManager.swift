@@ -65,6 +65,13 @@ public enum DatabaseManager {
             }
         }
 
+        migrator.registerMigration("v4_session_terminal") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "tty", .text)
+                t.add(column: "terminal_app", .text)
+            }
+        }
+
         try migrator.migrate(db)
     }
 
