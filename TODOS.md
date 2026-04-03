@@ -77,4 +77,60 @@ The two handlers share ~60 lines of near-identical logic (body collection, parse
 
 ---
 
+### StopWindowService: timer may fire after SessionEnd (race condition)
+
+**Priority:** P2
+**Component:** Core/Services/StopWindowService
+
+If Cursor sends `stop` and then `sessionEnd` within the 2-second window, `StopWindowService.flush()` fires after `SessionEnd` has already marked the session `.completed`. The current UPDATE guard (`NOT IN ('completed', 'stale')`) prevents the state from being overwritten, and `db.changesCount == 0` prevents the phantom event card — but the `onIdleResolved` callback (which fires the macOS push notification) still runs unconditionally after the flush. This means Cursor users may see a spurious "Cursor is ready" macOS notification even though the session has ended.
+
+**Fix:** Add a `cancelWindow(for sessionId: String)` method to `StopWindowService` that cancels and removes the window entry. Call it from `SessionLifecycleService` when processing `SessionEnd` so a pending timer is cancelled before it fires.
+
+**File:** `Sources/Core/Services/StopWindowService.swift`, `Sources/Core/Services/SessionLifecycleService.swift`
+**Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+
+---
+
+### hook_logs: inconsistent hookEventName casing between Claude Code and Cursor paths
+
+**Priority:** P3
+**Component:** Server/EventHandler, Core/Models/HookLog
+
+Claude Code hooks log PascalCase names (`"Stop"`, `"SessionStart"`) because `HookPayload` carries them already normalized. Cursor hooks log camelCase names (`"stop"`, `"sessionStart"`) because the `HookLog` is written from the raw `CursorHookPayload` *before* `CursorNormalizer.normalize()` is called. Any tooling or debugging workflow that queries `hook_logs` by `hookEventName` must know which path produced the row.
+
+**Fix:** Either log the normalized name for Cursor (move HookLog insertion after `normalize()`) or add a `source` column to `hook_logs` (`"claude-code"` / `"cursor"`) so queries can filter appropriately. The latter preserves the "raw before normalization" audit intent.
+
+**File:** `Sources/Server/EventHandler.swift` — `postCursorEvent`, `Sources/Core/Models/HookLog.swift`
+**Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+
+---
+
+### cursor-notify.sh: stdin pipe assumption needs live Cursor verification
+
+**Priority:** P2
+**Component:** Core/Services/HookInstaller (cursor-notify.sh)
+
+`cursor-notify.sh` reads the hook payload from stdin via `stdin_data=$(cat)`. This pattern works for Claude Code hooks (which pipe JSON over stdin). Cursor's hook invocation contract is not verified — if Cursor calls the script without piping JSON (or pipes it differently), `stdin_data` will be empty and the POST body will be `{}`, resulting in a PARSE_ERROR log entry. No live Cursor testing has been done.
+
+**Fix:** Verify with a real Cursor installation. Add a fallback: if `stdin_data` is empty, log the absence and exit 0 silently rather than POSTing an empty body. Consider adding a `cursor_hook_test.sh` smoke test that simulates the Cursor invocation pattern.
+
+**File:** `Sources/Core/Services/HookInstaller.swift` — `cursorScriptContent`
+**Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+
+---
+
+### cursor-notify.sh: tilde in hook path may not expand in Cursor hook invocation
+
+**Priority:** P2
+**Component:** Core/Services/HookInstaller (cursor-notify.sh), HookInstaller.cursorAgentPrompt()
+
+`HookInstaller.cursorAgentPrompt()` instructs Cursor Agent to register the hook as `~/.agent-dev-pilot/hooks/cursor-notify.sh`. Tilde expansion is a shell feature — if Cursor invokes hooks without a shell (e.g. via `execve` directly), the literal string `~/.agent-dev-pilot/hooks/cursor-notify.sh` will fail with "file not found". This is untested with a real Cursor installation.
+
+**Fix:** Use the absolute path (`/Users/<username>/.agent-dev-pilot/hooks/cursor-notify.sh`) in the hook registration prompt. `HookInstaller.cursorAgentPrompt()` can expand `~` via `FileManager.default.homeDirectoryForCurrentUser` at generation time.
+
+**File:** `Sources/Core/Services/HookInstaller.swift` — `cursorAgentPrompt()`
+**Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+
+---
+
 ## Completed
