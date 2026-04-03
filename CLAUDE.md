@@ -49,7 +49,7 @@ make clean
 
 ## Architecture
 
-Agent Dev Pilot is a macOS menubar app that receives Claude Code hook events via HTTP and surfaces them as native notifications and a popover UI.
+Agent Dev Pilot is a macOS menubar app that receives Claude Code and Cursor IDE hook events via HTTP and surfaces them as native notifications and a popover UI.
 
 ### Event flow
 
@@ -62,6 +62,11 @@ Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
   → NotificationBatcher (debounce/throttle)
   → NotificationService (UNUserNotificationCenter)
   → AppState publishes to SwiftUI via GRDB ValueObservation
+
+Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHandler.postCursorEvent
+  → CursorNormalizer.normalize() (CursorHookPayload → HookPayload, injects tool="cursor")
+  → same pipeline as above (SessionStart/SessionEnd → lifecycle; Stop → StopWindowService)
+  → unknown hook events silently dropped (200 OK, no DevEvent created)
 ```
 
 ### SPM targets
@@ -76,9 +81,11 @@ Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
 
 | Type | Location | Role |
 |------|----------|------|
-| `HookPayload` | Core/Models | Raw JSON from Claude Code hooks |
+| `HookPayload` | Core/Models | Raw JSON from Claude Code hooks. Optional `tool` field (nil = "claude-code") |
+| `CursorHookPayload` | Core/Models | Raw JSON from Cursor hooks (snake_case CodingKeys, `workspace_roots` defaults to `[]`) |
+| `CursorNormalizer` | Core/Models | Converts `CursorHookPayload` → `HookPayload`: maps `workspace_roots[0]`→`cwd`, PascalCase event names, injects `tool="cursor"` |
 | `DevEvent` | Core/Models | Persisted event (GRDB `FetchableRecord`/`PersistableRecord`) |
-| `DevSession` | Core/Models | Session grouping events by `session_id` |
+| `DevSession` | Core/Models | Session grouping events by `session_id`. `tool` field: "claude-code" or "cursor" |
 | `EventMapper` | Core/Models | Maps `HookPayload` → `DevEvent`, infers `EventType` and `AttentionTier` |
 | `DatabaseManager` | Core/Store | Opens GRDB `DatabasePool`, runs migrations |
 | `EventStore` / `SessionStore` | Core/Store | CRUD + pruning. `EventStore.fetchGroupedBySession(sessionIds:limit:in:)` fetches ≤5 undismissed non-background events per session. Always use typed GRDB queries, never raw SQL for updates |
@@ -87,15 +94,15 @@ Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
 | `StopWindowService` | Core/Services | Actor that coalesces Stop + Notification hooks within a 2s window; resolves session to `.idle` (agentStopped event written) or `.waiting` |
 | `NotificationBatcher` | Core/Services | Per-session batching (>3 events/2s) + global throttle (5/10s) |
 | `AuthTokenService` | Core/Services | Generates and persists a 32-byte hex token at `~/.agent-dev-pilot/token` (0600) |
-| `HookInstaller` | Core/Services | Embeds `notify.sh` script content; writes to `~/.agent-dev-pilot/hooks/notify.sh` (0755). Also generates the Claude Code settings prompt for hook registration |
-| `EventServer` | Server | Hummingbird app builder. `buildApp()` for tests, `start()` for production |
+| `HookInstaller` | Core/Services | Embeds `notify.sh` and `cursor-notify.sh` scripts; writes to `~/.agent-dev-pilot/hooks/`. `claudeCodePrompt()` and `cursorAgentPrompt()` generate hook registration prompts |
+| `EventServer` | Server | Hummingbird app builder. `buildApp()` for tests, `start()` for production. `configureRoutes` registers `/event` and `/cursor-event` |
 | `AuthMiddleware` | Server | Bearer token validation. `/health` bypasses auth |
 | `AppState` | App | `@Observable` root object. Owns DB, server task, batcher, stale timer |
 | `PopoverViewModel` | App/ViewModels | Single atomic `ValueObservation` populates `activeSessions: [DevSession]` (idle+busy+waiting, startedAt desc) and `eventsBySession: [String: [DevEvent]]` together. Also keeps `activeSessionCount`/`sessionStartTimes` for backward compat |
 | `SessionPanelViewModel` | App/ViewModels | Separate `ValueObservation` for the session panel, splits all sessions into `activeSessions`, `completedSessions`, `staleSessions` |
 | `FloatWindowController` | App/FloatWindow | Owns the floating `NSPanel`; drives `hidden/compact/hover/expanded` state machine. Reacts to `PopoverViewModel` changes and mouse tracking |
 | `TerminalFocusService` | App/Services | Routes focus requests to `GhosttyFocuser` or `TerminalAppFocuser` based on `session.terminalApp` |
-| `SessionGroupView` | App/Views | Renders one session group: header row (status dot + project name + capsule tag) + `EventCardView` list or "Working..." placeholder. `sessionStatusTag`/`sessionStatusColor` are internal free functions (not private, accessible via `@testable`) |
+| `SessionGroupView` | App/Views | Renders one session group: header row (status dot + project name + capsule tag + optional tool badge) + `EventCardView` list or "Working..." placeholder. `sessionStatusTag`/`sessionStatusColor`/`sessionToolBadge` are internal free functions (not private, accessible via `@testable`) |
 | `MenubarPopover` | App/Views | Session-grouped popover: `ForEach(activeSessions)` → `SessionGroupView` with dividers; empty state shows `terminal` SF symbol |
 
 ### AttentionTier
@@ -151,6 +158,12 @@ State transitions in `SessionLifecycleService`:
 Script content is embedded in `HookInstaller.scriptContent` (the canonical source of truth — not in `Resources/`). `HookInstaller.installScript()` writes it to `~/.agent-dev-pilot/hooks/notify.sh` (0755), skipping the write if content is unchanged. Fire-and-forget — uses `&` so it never blocks Claude Code. Enforces 64KB payload limit via `head -c 65536`. If the app is not running, events are silently dropped.
 
 Claude Code hooks registered: `Notification`, `SessionStart`, `SessionEnd`. The `UserPromptSubmit` hook is also handled. Use `HookInstaller.claudeCodePrompt()` to generate the settings.json merge prompt.
+
+### cursor-notify.sh
+
+Script content is embedded in `HookInstaller.cursorScriptContent`. `HookInstaller.installCursorScript()` writes it to `~/.agent-dev-pilot/hooks/cursor-notify.sh` (0755). Posts to `/cursor-event` endpoint. Respects `$AGENT_DEV_PILOT_PORT` env var (defaults to 9876). Fire-and-forget — never blocks Cursor.
+
+Cursor hooks registered: `sessionStart`, `sessionEnd`, `stop`. Use `HookInstaller.cursorAgentPrompt()` to generate a prompt the user pastes into Cursor Agent, which merges hooks into `~/.cursor/hooks.json`.
 
 ### Float window
 
