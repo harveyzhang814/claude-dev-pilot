@@ -28,4 +28,29 @@ struct SessionGroupViewTests {
     func statusTagWaiting() {
         #expect(sessionStatusTag(makeSession(status: .waiting)) == "Waiting")
     }
+
+    // MARK: - Tool badge
+
+    private func makeSessionWithTool(_ tool: String) -> DevSession {
+        DevSession(
+            id: "s2", project: "my-project", cwd: "/Users/dev/my-project",
+            tool: tool, status: .idle,
+            startedAt: Date(), endedAt: nil, totalTokens: nil, lastEventTitle: nil
+        )
+    }
+
+    @Test("toolBadge for cursor session returns 'Cursor'")
+    func toolBadgeCursor() {
+        #expect(sessionToolBadge(makeSessionWithTool("cursor")) == "Cursor")
+    }
+
+    @Test("toolBadge for claude-code session returns nil")
+    func toolBadgeClaudeCode() {
+        #expect(sessionToolBadge(makeSessionWithTool("claude-code")) == nil)
+    }
+
+    @Test("toolBadge for unknown tool returns nil")
+    func toolBadgeUnknown() {
+        #expect(sessionToolBadge(makeSessionWithTool("some-future-tool")) == nil)
+    }
 }

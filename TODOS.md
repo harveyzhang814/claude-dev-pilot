@@ -30,4 +30,23 @@
 
 ---
 
+## Cursor Integration
+
+### HookInstaller: installCursorScript() 调用时机
+
+**Priority:** P2
+**Component:** Core/Services/HookInstaller, App/Settings
+
+目前 `installCursorScript()` 已定义但没有任何地方调用它。何时安装 Cursor hook 脚本尚未决定：随 Claude Code hook 一起安装（Settings 一次完成），还是独立的 Cursor onboarding 入口。
+
+**影响：** 决定会影响 Settings 页面 UI 设计——是一个统一的 "Install All Hooks" 按钮，还是两个独立的安装入口。
+
+**当前状态：** MVP 实现中暂时不调用；脚本存在于 `~/.agent-dev-pilot/hooks/cursor-notify.sh` 但需要用户手动触发或随 Claude Code 安装一起处理。
+
+**建议下一步：** 实现 Settings UI 时决定是否合并。参考 `HookInstaller.installScript()` 的调用位置作为参照。
+**File:** `Sources/Core/Services/HookInstaller.swift`, `Sources/App/Views/Settings`
+**Found by:** /plan-eng-review on 2026-04-03 (branch: staging, Cursor integration design)
+
+---
+
 ## Completed
