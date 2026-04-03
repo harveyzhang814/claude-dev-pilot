@@ -5,7 +5,8 @@ import Foundation
 /// Cursor sends camelCase hook_event_name values (e.g. "sessionStart", "stop").
 public struct CursorHookPayload: Codable, Sendable {
     public let sessionId: String
-    public let conversationId: String
+    /// May be absent in older Cursor versions or background agents; defaults to nil.
+    public let conversationId: String?
     public let hookEventName: String
     /// workspace_roots may be absent in older Cursor versions or background agents; defaults to [].
     public let workspaceRoots: [String]
@@ -48,7 +49,7 @@ extension CursorHookPayload {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sessionId = try c.decode(String.self, forKey: .sessionId)
-        conversationId = try c.decode(String.self, forKey: .conversationId)
+        conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
         hookEventName = try c.decode(String.self, forKey: .hookEventName)
         // Default to [] if key is absent (forward compat with older Cursor versions)
         workspaceRoots = (try? c.decode([String].self, forKey: .workspaceRoots)) ?? []

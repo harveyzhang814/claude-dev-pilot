@@ -49,7 +49,10 @@ enum EventHandler {
             }
 
             let event = EventMapper.map(decoded)
-            try SessionLifecycleService.processEvent(event, sessionTitle: decoded.title, tool: decoded.tool ?? "claude-code", in: db)
+            // Always use "claude-code" — do not trust the tool field from the wire.
+            // The /event endpoint is exclusively for Claude Code hooks; tool identity
+            // is determined by endpoint, not by the client-supplied payload.
+            try SessionLifecycleService.processEvent(event, sessionTitle: decoded.title, tool: "claude-code", in: db)
 
             switch decoded.hookEventName {
             case "Stop":

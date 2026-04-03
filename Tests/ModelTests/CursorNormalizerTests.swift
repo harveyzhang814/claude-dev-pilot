@@ -40,11 +40,12 @@ struct CursorNormalizerTests {
         #expect(result.cwd == "/Users/dev/myproject")
     }
 
-    @Test("normalize() with empty workspace_roots → cwd = empty string")
+    @Test("normalize() with empty workspace_roots → cwd = 'unknown' sentinel")
     func normalizeEmptyWorkspaceRoots() {
         let cursor = makeCursorPayload(hookEventName: "stop", workspaceRoots: [])
         let result = CursorNormalizer.normalize(cursor)
-        #expect(result.cwd == "")
+        // "unknown" sentinel prevents blank project name in the UI
+        #expect(result.cwd == "unknown")
     }
 
     @Test("normalize() sets tool = cursor")
