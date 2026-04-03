@@ -79,11 +79,12 @@ public actor StopWindowService {
             if newStatus == .idle {
                 // Persist a review-tier event so the popover shows a green "ready" card
                 if let session = try DevSession.fetchOne(db, key: sessionId) {
+                    let readyTitle = session.tool == "cursor" ? "Cursor is ready" : "Claude is ready"
                     let event = DevEvent(
                         id: UUID().uuidString,
                         sessionId: sessionId,
                         type: .agentStopped,
-                        title: "Claude is ready",
+                        title: readyTitle,
                         detail: session.cwd,
                         payload: "{}",
                         tokenCount: nil,

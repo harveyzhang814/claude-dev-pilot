@@ -119,14 +119,18 @@ enum EventHandler {
                 return Response(status: .ok, headers: [:], body: .init())
             }
 
+            // Only handle known event types. Unknown events (future Cursor hooks) are
+            // silently acknowledged to avoid creating spurious agentStopped events.
+            guard decoded.hookEventName == "Stop" else {
+                return Response(status: .ok, headers: [:], body: .init())
+            }
+
             let event = EventMapper.map(decoded)
             // Pass tool="cursor" explicitly so the fallback session path tags correctly
             try SessionLifecycleService.processEvent(event, sessionTitle: nil, tool: "cursor", in: db)
 
-            // Cursor has no Notification hook equivalent — only Stop feeds the stop window
-            if decoded.hookEventName == "Stop" {
-                await stopWindow.recordStop(sessionId: decoded.sessionId)
-            }
+            // Feed stop into the window; Cursor has no Notification hook equivalent
+            await stopWindow.recordStop(sessionId: decoded.sessionId)
 
             onEvent(event)
             return Response(status: .ok, headers: [:], body: .init())

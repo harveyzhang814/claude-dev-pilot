@@ -106,4 +106,17 @@ struct CursorHookPayloadTests {
         let payload = try JSONDecoder().decode(CursorHookPayload.self, from: Data(json.utf8))
         #expect(payload.workspaceRoots.isEmpty)
     }
+
+    @Test("Missing workspace_roots key defaults to empty array (forward compat)")
+    func missingWorkspaceRootsDefaultsToEmpty() throws {
+        let json = """
+        {
+            "session_id": "abc",
+            "conversation_id": "abc",
+            "hook_event_name": "sessionStart"
+        }
+        """
+        let payload = try JSONDecoder().decode(CursorHookPayload.self, from: Data(json.utf8))
+        #expect(payload.workspaceRoots.isEmpty)
+    }
 }

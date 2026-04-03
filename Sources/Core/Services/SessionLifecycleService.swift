@@ -14,10 +14,10 @@ public enum SessionLifecycleService {
             switch payload.hookEventName {
             case "SessionStart":
                 if let session = existing {
-                    // Always refresh location/terminal info in case Claude Code restarted
+                    // Always refresh location/terminal info in case the tool restarted
                     try db.execute(
-                        sql: "UPDATE sessions SET cwd = ?, tty = ?, terminal_app = ? WHERE id = ?",
-                        arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.sessionId]
+                        sql: "UPDATE sessions SET cwd = ?, tty = ?, terminal_app = ?, tool = ? WHERE id = ?",
+                        arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.tool ?? "claude-code", payload.sessionId]
                     )
                     // Update custom_name only when explicitly provided (don't clear a prior rename)
                     if let title = payload.title {

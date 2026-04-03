@@ -7,6 +7,7 @@ public struct CursorHookPayload: Codable, Sendable {
     public let sessionId: String
     public let conversationId: String
     public let hookEventName: String
+    /// workspace_roots may be absent in older Cursor versions or background agents; defaults to [].
     public let workspaceRoots: [String]
     public let cursorVersion: String?
     public let model: String?
@@ -38,5 +39,29 @@ public struct CursorHookPayload: Codable, Sendable {
         case cacheReadTokens = "cache_read_tokens"
         case cacheWriteTokens = "cache_write_tokens"
         case command
+    }
+}
+
+// MARK: - Decodable (extension preserves the synthesized memberwise init)
+
+extension CursorHookPayload {
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        conversationId = try c.decode(String.self, forKey: .conversationId)
+        hookEventName = try c.decode(String.self, forKey: .hookEventName)
+        // Default to [] if key is absent (forward compat with older Cursor versions)
+        workspaceRoots = (try? c.decode([String].self, forKey: .workspaceRoots)) ?? []
+        cursorVersion = try c.decodeIfPresent(String.self, forKey: .cursorVersion)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        isBackgroundAgent = try c.decodeIfPresent(Bool.self, forKey: .isBackgroundAgent)
+        composerMode = try c.decodeIfPresent(String.self, forKey: .composerMode)
+        transcriptPath = try c.decodeIfPresent(String.self, forKey: .transcriptPath)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        inputTokens = try c.decodeIfPresent(Int.self, forKey: .inputTokens)
+        outputTokens = try c.decodeIfPresent(Int.self, forKey: .outputTokens)
+        cacheReadTokens = try c.decodeIfPresent(Int.self, forKey: .cacheReadTokens)
+        cacheWriteTokens = try c.decodeIfPresent(Int.self, forKey: .cacheWriteTokens)
+        command = try c.decodeIfPresent(String.self, forKey: .command)
     }
 }

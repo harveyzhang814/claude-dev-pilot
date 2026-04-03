@@ -204,4 +204,46 @@ struct CursorEventHandlerTests {
             #expect(response.status == .ok)
         }
     }
+
+    @Test("POST /cursor-event unknown hook event returns 200 and creates no DevEvent")
+    func postCursorUnknownEventDropped() async throws {
+        let (app, db) = try makeApp()
+        let sessionId = "cursor-unknown-event"
+
+        try await app.test(.router) { client in
+            // SessionStart first
+            let startBody = ByteBuffer(string: sessionStartPayload(sessionId: sessionId))
+            _ = try await client.execute(
+                uri: "/cursor-event",
+                method: .post,
+                headers: [.authorization: "Bearer test-token"],
+                body: startBody
+            )
+
+            // Unknown future event
+            let unknownJson = """
+            {
+              "session_id": "\(sessionId)",
+              "conversation_id": "\(sessionId)",
+              "hook_event_name": "beforeShellExecution",
+              "cursor_version": "3.1.0",
+              "workspace_roots": ["/Users/test/myproject"],
+              "command": "ls -la"
+            }
+            """
+            let unknownBody = ByteBuffer(string: unknownJson)
+            let response = try await client.execute(
+                uri: "/cursor-event",
+                method: .post,
+                headers: [.authorization: "Bearer test-token"],
+                body: unknownBody
+            )
+            #expect(response.status == .ok)
+        }
+
+        // No DevEvent should be created for the unknown hook
+        let events = try await db.read { try DevEvent.fetchAll($0) }
+        let unknownEvent = events.first { $0.sessionId == sessionId }
+        #expect(unknownEvent == nil, "Unknown Cursor hook events must not create DevEvent records")
+    }
 }
