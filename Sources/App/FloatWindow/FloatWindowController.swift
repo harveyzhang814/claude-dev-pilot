@@ -61,6 +61,11 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         startObservingContentHeight()
     }
 
+    // MARK: - Constants
+
+    nonisolated static let maxExpandedHeight: CGFloat = 480
+    nonisolated static let minExpandedHeight: CGFloat = 150
+
     // MARK: - Private state
 
     private enum State { case hidden, compact, hover, expanded }
@@ -125,9 +130,11 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         if newState == .expanded {
-            // Don't use hardcoded 480. The panel stays at its current height now;
-            // startObservingContentHeight() will resize once SwiftUI reports the
-            // actual MenubarPopover height via GeometryReader (guaranteed post-render).
+            // Use fittingSize for the initial height (synchronous, no flash).
+            // startObservingContentHeight() handles subsequent dynamic changes.
+            hostingView.layoutSubtreeIfNeeded()
+            let initialHeight = Self.clampedExpandedHeight(hostingView.fittingSize.height)
+            positionPanel(height: initialHeight, animated: panel.isVisible)
             if !panel.isVisible {
                 panel.orderFront(nil)
             }
@@ -152,8 +159,17 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             let count = min(max(viewModel.activeSessions.count, 1), 5)
             // rows + toolbar: divider(1) + padding-top(2) + padding-vertical(8) + icon(22) = 33, +1 buffer
             return CGFloat(count) * 36 + 34
-        case .expanded: return 480
+        case .expanded:
+            // Expanded height is driven by fittingSize / GeometryReader — not a fixed value.
+            // This case is unreachable; .expanded returns early in transition(to:).
+            return Self.maxExpandedHeight
         }
+    }
+
+    /// Clamps a SwiftUI-reported height to the allowed expanded range.
+    nonisolated static func clampedExpandedHeight(_ h: CGFloat) -> CGFloat {
+        guard h > 0 else { return maxExpandedHeight }
+        return min(max(h, minExpandedHeight), maxExpandedHeight)
     }
 
     private func positionPanel(height: CGFloat, animated: Bool) {
@@ -228,7 +244,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             guard isObserving else { return }
             let h = displayState.contentHeight
             if currentState == .expanded, h > 0 {
-                let clamped = min(max(h, 150), 480)
+                let clamped = Self.clampedExpandedHeight(h)
                 if abs(clamped - panel.frame.height) > 1 {
                     positionPanel(height: clamped, animated: true)
                 }
