@@ -55,8 +55,10 @@ Agent Dev Pilot is a macOS menubar app that receives Claude Code hook events via
 
 ```
 Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
-  → EventMapper (HookPayload → DevEvent)
-  → SessionLifecycleService (persist event, update session state machine)
+  → SessionLifecycleService.handleSessionLifecycle() for SessionStart/SessionEnd
+  → EventMapper (HookPayload → DevEvent) for Notification/UserPromptSubmit hooks
+  → SessionLifecycleService.processEvent() (persist event, update session state)
+  → StopWindowService (coalesces Stop + Notification within 2s to resolve idle/waiting)
   → NotificationBatcher (debounce/throttle)
   → NotificationService (UNUserNotificationCenter)
   → AppState publishes to SwiftUI via GRDB ValueObservation
@@ -80,13 +82,19 @@ Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
 | `EventMapper` | Core/Models | Maps `HookPayload` → `DevEvent`, infers `EventType` and `AttentionTier` |
 | `DatabaseManager` | Core/Store | Opens GRDB `DatabasePool`, runs migrations |
 | `EventStore` / `SessionStore` | Core/Store | CRUD + pruning. `EventStore.fetchGroupedBySession(sessionIds:limit:in:)` fetches ≤5 undismissed non-background events per session. Always use typed GRDB queries, never raw SQL for updates |
-| `SessionLifecycleService` | Core/Services | Session state machine: running/waiting/completed/error/stale |
+| `HookLog` / `HookLogStore` | Core/Models + Core/Store | Debug audit log: one row per incoming HTTP request, inserted before any business logic. Fields: `hookEventName`, `sessionId`, `notificationType`, `rawPayload` (true raw JSON), `receivedAt`. Parse failures stored with `hookEventName = "PARSE_ERROR"`. Pruned by same `retentionDays` as events |
+| `SessionLifecycleService` | Core/Services | Handles `SessionStart`/`SessionEnd` hook lifecycle and `processEvent()` for event-driven state transitions |
+| `StopWindowService` | Core/Services | Actor that coalesces Stop + Notification hooks within a 2s window; resolves session to `.idle` (agentStopped event written) or `.waiting` |
 | `NotificationBatcher` | Core/Services | Per-session batching (>3 events/2s) + global throttle (5/10s) |
 | `AuthTokenService` | Core/Services | Generates and persists a 32-byte hex token at `~/.agent-dev-pilot/token` (0600) |
+| `HookInstaller` | Core/Services | Embeds `notify.sh` script content; writes to `~/.agent-dev-pilot/hooks/notify.sh` (0755). Also generates the Claude Code settings prompt for hook registration |
 | `EventServer` | Server | Hummingbird app builder. `buildApp()` for tests, `start()` for production |
 | `AuthMiddleware` | Server | Bearer token validation. `/health` bypasses auth |
 | `AppState` | App | `@Observable` root object. Owns DB, server task, batcher, stale timer |
-| `PopoverViewModel` | App/ViewModels | Single atomic `ValueObservation` populates `activeSessions: [DevSession]` (running+waiting, startedAt desc) and `eventsBySession: [String: [DevEvent]]` together. Also keeps `activeSessionCount`/`sessionStartTimes` for backward compat. `actionEvents`/`recentEvents` exist but have no active consumers |
+| `PopoverViewModel` | App/ViewModels | Single atomic `ValueObservation` populates `activeSessions: [DevSession]` (idle+busy+waiting, startedAt desc) and `eventsBySession: [String: [DevEvent]]` together. Also keeps `activeSessionCount`/`sessionStartTimes` for backward compat |
+| `SessionPanelViewModel` | App/ViewModels | Separate `ValueObservation` for the session panel, splits all sessions into `activeSessions`, `completedSessions`, `staleSessions` |
+| `FloatWindowController` | App/FloatWindow | Owns the floating `NSPanel`; drives `hidden/compact/hover/expanded` state machine. Reacts to `PopoverViewModel` changes and mouse tracking |
+| `TerminalFocusService` | App/Services | Routes focus requests to `GhosttyFocuser` or `TerminalAppFocuser` based on `session.terminalApp` |
 | `SessionGroupView` | App/Views | Renders one session group: header row (status dot + project name + capsule tag) + `EventCardView` list or "Working..." placeholder. `sessionStatusTag`/`sessionStatusColor` are internal free functions (not private, accessible via `@testable`) |
 | `MenubarPopover` | App/Views | Session-grouped popover: `ForEach(activeSessions)` → `SessionGroupView` with dividers; empty state shows `terminal` SF symbol |
 
@@ -95,13 +103,13 @@ Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
 | Tier | EventType | UI behavior |
 |------|-----------|-------------|
 | `.action` | `permissionNeeded` | Red bar in popover, native notification |
-| `.review` | `taskCompleted`, `taskError` | Green/gray bar in popover |
-| `.background` | `taskStarted` | Session panel only; excluded from popover |
+| `.review` | `agentStopped` (idle-ready) | Green "ready" card in popover |
+| `.background` | `promptSubmitted`, `authSuccess` | Session panel only; excluded from popover |
 
 ### Database
 
 - SQLite via GRDB, WAL mode, stored at `~/Library/Application Support/AgentDevPilot/db.sqlite`
-- Migrations: `v1_initial` (sessions + events tables + indexes), `v2_dismissed` (adds `is_dismissed` to events)
+- Migrations: `v1_initial` → `v2_dismissed` → `v3_session_cwd` → `v4_session_terminal` (`tty`/`terminal_app`) → `v5_session_status` (renames `running`→`idle`, `error`→`completed`) → `v6_event_types` (renames `taskStarted`→`promptSubmitted`, `taskCompleted/taskError`→`agentStopped`) → `v7_session_custom_name` → `v8_hook_logs` (creates `hook_logs` debug table)
 - Tests use in-memory DB via `DatabaseManager.openInMemoryDatabase()`
 - `ValueObservation` closures must always read every table they need to track — an early-return guard that skips a table read will cause that table to be unregistered from the observation
 
@@ -111,13 +119,16 @@ Token at `~/.agent-dev-pilot/token` (0600 permissions). `notify.sh` reads this t
 
 ### Session state machine
 
-State transitions driven by `EventType` inside `SessionLifecycleService.processEvent()`:
-- `taskStarted` → `running`
-- `permissionNeeded` → `waiting`
-- `taskCompleted` → `completed` (stamps `ended_at`)
-- `taskError` → `error` (stamps `ended_at`)
-- Any event on a completed/error session → reopen to `running`
-- 60s timer in `AppState` calls `SessionStore.markStaleSessions(olderThan: 30*60)` → `stale`
+States: `idle` (active, no task) | `busy` (executing) | `waiting` (needs user input) | `completed` (SessionEnd received) | `stale` (inactive 30 min)
+
+State transitions in `SessionLifecycleService`:
+- `SessionStart` hook → create session as `.idle`; if completed/stale, reopen to `.idle`
+- `SessionEnd` hook → `.completed` (stamps `ended_at`)
+- `promptSubmitted` / `authSuccess` event → `.busy`; all prior events for session auto-dismissed
+- `permissionNeeded` event → `.waiting`
+- `agentStopped` event → no direct transition; `StopWindowService` resolves after 2s window: Stop-only → `.idle`, Stop+Notification → `.waiting`
+- Any event on a completed/stale session → reopen to `.idle`
+- 60s timer in `AppState` → `.stale` for sessions with no activity for 30 minutes
 
 ### Stale session and pruning
 
@@ -132,10 +143,25 @@ State transitions driven by `EventType` inside `SessionLifecycleService.processE
 | `retentionDays` | 30 | Event pruning age |
 | `soundEnabled` | true | Notification sound |
 | `onboardingCompleted` | false | Onboarding gate |
+| `floatWindowX` | — | Saved X origin for float window (persisted across launches) |
+| `floatWindowTopY` | — | Saved top edge Y for float window (persisted across launches) |
 
 ### notify.sh
 
-Installed at `~/.agent-dev-pilot/hooks/notify.sh` (or sourced from `Resources/notify.sh`). Fire-and-forget — uses `&` so it never blocks Claude Code. Enforces 64KB payload limit via `head -c 65536`. If the app is not running, events are silently dropped.
+Script content is embedded in `HookInstaller.scriptContent` (the canonical source of truth — not in `Resources/`). `HookInstaller.installScript()` writes it to `~/.agent-dev-pilot/hooks/notify.sh` (0755), skipping the write if content is unchanged. Fire-and-forget — uses `&` so it never blocks Claude Code. Enforces 64KB payload limit via `head -c 65536`. If the app is not running, events are silently dropped.
+
+Claude Code hooks registered: `Notification`, `SessionStart`, `SessionEnd`. The `UserPromptSubmit` hook is also handled. Use `HookInstaller.claudeCodePrompt()` to generate the settings.json merge prompt.
+
+### Float window
+
+`FloatWindowController` owns a borderless, always-floating `NSPanel` with its own state machine:
+- `hidden` → `compact` (auto, when active sessions + events appear)
+- `compact` → `hover` (on mouse enter; shows session rows + toolbar)
+- `hover` / `expanded` → `compact` (on mouse exit after 1s delay)
+- `compact` / `hover` → `expanded` (on click/tap or notification card tap)
+- `expanded` → `compact` / `hidden` (on toggle or mouse exit)
+
+The panel renders `FloatWindowCompactView` (compact), `FloatWindowHoverView` (hover), or `MenubarPopover` (expanded). `TrackingView` wraps the content for mouse enter/exit events. Position is persisted via `floatWindowX`/`floatWindowTopY` UserDefaults; the top edge is pinned across height changes (only height changes on expand/collapse).
 
 ## Testing patterns
 
