@@ -49,4 +49,32 @@
 
 ---
 
+### tool field validation on /event endpoint
+
+**Priority:** P3
+**Component:** Server/EventHandler
+
+`HookPayload.tool` is decoded from the raw POST body. Any localhost process with a valid token can inject `"tool": "cursor"` into a Claude Code `/event` request and mis-tag the session. The default `notify.sh` doesn't set this field (so it defaults to "claude-code"), but there is no server-side allowlist validation. An unexpected tool value (e.g. "vscode") silently falls through to `default: return nil` in `sessionToolBadge` and is never surfaced.
+
+**Fix:** Validate `tool` against an allowlist `["claude-code", "cursor"]` in `postEvent`. Unknown values should be coerced to `"claude-code"` with a HookLog warning.
+
+**File:** `Sources/Server/EventHandler.swift`
+**Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+
+---
+
+### postEvent / postCursorEvent pipeline duplication
+
+**Priority:** P3
+**Component:** Server/EventHandler
+
+The two handlers share ~60 lines of near-identical logic (body collection, parse, HookLog, lifecycle routing, stop window, onEvent). Any future change (new HookLog fields, error enrichment, new event types) must be applied to both. Already diverging: comments removed from `postEvent` in this diff.
+
+**Fix:** Extract a `processParsedPayload(decoded:, db:, stopWindow:, onEvent:)` internal helper. Both handlers call it after their respective parsing step.
+
+**File:** `Sources/Server/EventHandler.swift`
+**Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+
+---
+
 ## Completed
