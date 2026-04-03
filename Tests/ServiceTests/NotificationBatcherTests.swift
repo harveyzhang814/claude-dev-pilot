@@ -104,4 +104,22 @@ struct NotificationBatcherTests {
         }
         #expect(notifications.isEmpty)
     }
+
+    @Test("submitIdle with tool=cursor emits 'Cursor is ready' body")
+    func submitIdleCursorTool() {
+        var notifications: [NotificationBatcher.Notification] = []
+        let batcher = NotificationBatcher { notifications.append($0) }
+        batcher.submitIdle(sessionId: "cursor-1", project: "my-project", tool: "cursor")
+        #expect(notifications.count == 1)
+        #expect(notifications[0].body == "Cursor is ready")
+    }
+
+    @Test("submitIdle with tool=claude-code emits 'Claude is ready' body")
+    func submitIdleClaudeCodeTool() {
+        var notifications: [NotificationBatcher.Notification] = []
+        let batcher = NotificationBatcher { notifications.append($0) }
+        batcher.submitIdle(sessionId: "cc-1", project: "my-project", tool: "claude-code")
+        #expect(notifications.count == 1)
+        #expect(notifications[0].body == "Claude is ready")
+    }
 }
