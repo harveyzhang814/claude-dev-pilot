@@ -8,4 +8,6 @@ import Foundation
 final class FloatWindowDisplayState {
     enum Mode { case hidden, compact, hover, expanded }
     var mode: Mode = .hidden
+    /// Reported by the SwiftUI content via GeometryReader after each render.
+    var contentHeight: CGFloat = 0
 }
