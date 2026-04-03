@@ -58,7 +58,13 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         panel.delegate = self
         setupContentView()
         startObserving()
+        startObservingContentHeight()
     }
+
+    // MARK: - Constants
+
+    nonisolated static let maxExpandedHeight: CGFloat = 480
+    nonisolated static let minExpandedHeight: CGFloat = 150
 
     // MARK: - Private state
 
@@ -82,7 +88,10 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             displayState: displayState,
             viewModel: viewModel,
             onExpand: { [weak self] in self?.transition(to: .expanded) },
-            onFocusSession: onFocusSession
+            onFocusSession: onFocusSession,
+            onContentHeight: { [weak self] h in
+                Task { @MainActor [weak self] in self?.displayState.contentHeight = h }
+            }
         )
         hostingView = NSHostingView(rootView: root)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -120,6 +129,18 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             return
         }
 
+        if newState == .expanded {
+            // Use fittingSize for the initial height (synchronous, no flash).
+            // startObservingContentHeight() handles subsequent dynamic changes.
+            hostingView.layoutSubtreeIfNeeded()
+            let initialHeight = Self.clampedExpandedHeight(hostingView.fittingSize.height)
+            positionPanel(height: initialHeight, animated: panel.isVisible)
+            if !panel.isVisible {
+                panel.orderFront(nil)
+            }
+            return
+        }
+
         let height = targetHeight(for: newState)
         positionPanel(height: height, animated: panel.isVisible)
 
@@ -136,9 +157,19 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             return CGFloat(count) * 36
         case .hover:
             let count = min(max(viewModel.activeSessions.count, 1), 5)
-            return CGFloat(count) * 36 + 28  // rows + toolbar
-        case .expanded: return 480
+            // rows + toolbar: divider(1) + padding-top(2) + padding-vertical(8) + icon(22) = 33, +1 buffer
+            return CGFloat(count) * 36 + 34
+        case .expanded:
+            // Expanded height is driven by fittingSize / GeometryReader — not a fixed value.
+            // This case is unreachable; .expanded returns early in transition(to:).
+            return Self.maxExpandedHeight
         }
+    }
+
+    /// Clamps a SwiftUI-reported height to the allowed expanded range.
+    nonisolated static func clampedExpandedHeight(_ h: CGFloat) -> CGFloat {
+        guard h > 0 else { return maxExpandedHeight }
+        return min(max(h, minExpandedHeight), maxExpandedHeight)
     }
 
     private func positionPanel(height: CGFloat, animated: Bool) {
@@ -201,6 +232,27 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             Task { @MainActor [weak self] in
                 guard let self, self.isObserving else { return }
                 self.startObserving()
+            }
+        }
+    }
+
+    /// Observes contentHeight reported by SwiftUI's GeometryReader.
+    /// Only resizes the panel in .expanded mode — hover/compact use targetHeight formulas
+    /// (accurate enough that GeometryReader correction isn't needed there).
+    private func startObservingContentHeight() {
+        withObservationTracking {
+            guard isObserving else { return }
+            let h = displayState.contentHeight
+            if currentState == .expanded, h > 0 {
+                let clamped = Self.clampedExpandedHeight(h)
+                if abs(clamped - panel.frame.height) > 1 {
+                    positionPanel(height: clamped, animated: true)
+                }
+            }
+        } onChange: {
+            Task { @MainActor [weak self] in
+                guard let self, self.isObserving else { return }
+                self.startObservingContentHeight()
             }
         }
     }
@@ -268,8 +320,21 @@ private struct FloatWindowRootView: View {
     let viewModel: PopoverViewModel
     let onExpand: () -> Void
     let onFocusSession: (DevSession) -> Void
+    let onContentHeight: (CGFloat) -> Void
 
     var body: some View {
+        content
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { onContentHeight(geo.size.height) }
+                        .onChange(of: geo.size.height) { _, h in onContentHeight(h) }
+                }
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch displayState.mode {
         case .hidden:
             Color.clear.frame(width: 1, height: 1)
