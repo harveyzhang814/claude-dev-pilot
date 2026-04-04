@@ -332,7 +332,8 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     }
 
     private func handleMouseExit() {
-        // When locked and already in hover, mouse exit has no effect.
+        // When locked and in hover, mouse exit has no effect — stay in hover.
+        // When locked and in expanded, still collapse (scheduleCollapse resolves to .hover, not .compact).
         if displayState.isHoverLocked && currentState == .hover { return }
         if currentState == .hover || currentState == .expanded { scheduleCollapse() }
     }
