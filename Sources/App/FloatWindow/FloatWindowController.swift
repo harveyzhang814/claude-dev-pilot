@@ -18,7 +18,14 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         case .compact, .hover:
             transition(to: .expanded)
         case .expanded:
-            let next: FloatWindowDisplayState.Mode = viewModel.activeSessions.isEmpty ? .hidden : .compact
+            let next: FloatWindowDisplayState.Mode
+            if viewModel.activeSessions.isEmpty {
+                next = .hidden
+            } else if displayState.isHoverLocked {
+                next = .hover
+            } else {
+                next = .compact
+            }
             transition(to: next)
         }
     }
