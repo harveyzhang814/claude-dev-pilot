@@ -122,14 +122,15 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         currentState = newState
-        displayState.mode = newMode
 
         if newState == .hidden {
+            displayState.mode = newMode
             panel.orderOut(nil)
             return
         }
 
         if newState == .expanded {
+            displayState.mode = newMode
             // Start at maxExpandedHeight so SwiftUI can render MenubarPopover at full size.
             // startObservingContentHeight() will resize down once GeometryReader reports
             // the actual content height. Using fittingSize here is unreliable because
@@ -144,7 +145,22 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         let height = targetHeight(for: newState)
-        positionPanel(height: height, animated: panel.isVisible)
+        // Collapsing (panel shrinks): keep current content visible during the animation,
+        // switch displayState.mode only after the animation completes. This prevents the
+        // incoming (smaller) view from centering itself in an oversized panel mid-animation
+        // and appearing at the wrong position. Applies to hover→compact, expanded→compact,
+        // expanded→hover, and any future collapsing transition automatically.
+        // Expanding: switch content first so SwiftUI renders at full target size immediately.
+        let isCollapsing = panel.isVisible && height < panel.frame.height
+        if isCollapsing {
+            positionPanel(height: height, animated: true) { [weak self] in
+                guard let self, self.currentState == newState else { return }
+                self.displayState.mode = newMode
+            }
+        } else {
+            displayState.mode = newMode
+            positionPanel(height: height, animated: panel.isVisible)
+        }
 
         if !panel.isVisible {
             panel.orderFront(nil)
@@ -174,7 +190,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         return min(max(h, minExpandedHeight), maxExpandedHeight)
     }
 
-    private func positionPanel(height: CGFloat, animated: Bool) {
+    private func positionPanel(height: CGFloat, animated: Bool, completion: (() -> Void)? = nil) {
         let originX: CGFloat
         let topY: CGFloat
 
@@ -204,9 +220,12 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 panel.animator().setFrame(newFrame, display: true)
+            } completionHandler: {
+                completion?()
             }
         } else {
             panel.setFrame(newFrame, display: true)
+            completion?()
         }
     }
 
