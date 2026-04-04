@@ -6,6 +6,8 @@ struct FloatWindowHoverView: View {
     let eventsBySession: [String: [DevEvent]]
     let onFocusSession: (DevSession) -> Void
     let onExpand: () -> Void
+    let isLocked: Bool
+    let onToggleLock: () -> Void
 
     /// Non-stale before stale. Within active sessions: group by cwd (newest cwd
     /// first), then claude-code before cursor within the same cwd.
@@ -45,6 +47,18 @@ struct FloatWindowHoverView: View {
                 } label: {
                     Image(systemName: "gear")
                         .foregroundColor(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(Color.clear)
+                .cornerRadius(3)
+
+                Button {
+                    onToggleLock()
+                } label: {
+                    Image(systemName: isLocked ? "lock.fill" : "lock")
+                        .foregroundColor(isLocked ? .primary : .secondary)
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
