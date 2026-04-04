@@ -44,9 +44,9 @@ struct SessionGroupViewTests {
         #expect(sessionToolBadge(makeSessionWithTool("cursor")) == "Cursor")
     }
 
-    @Test("toolBadge for claude-code session returns nil")
+    @Test("toolBadge for claude-code session returns 'Claude'")
     func toolBadgeClaudeCode() {
-        #expect(sessionToolBadge(makeSessionWithTool("claude-code")) == nil)
+        #expect(sessionToolBadge(makeSessionWithTool("claude-code")) == "Claude")
     }
 
     @Test("toolBadge for unknown tool returns nil")

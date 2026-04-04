@@ -81,11 +81,21 @@ private struct SessionHeaderRow: View {
                 }
                 .frame(width: 8, height: 8)
 
-                Text(displayName)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Name + tool badge as a semantic unit
+                HStack(spacing: 4) {
+                    Text(displayName)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if let badge = sessionToolBadge(session) {
+                        Text(badge)
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(NSColor.secondaryLabelColor))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(sessionStatusTag(session))
                     .font(.caption2)
@@ -95,12 +105,6 @@ private struct SessionHeaderRow: View {
                     .padding(.vertical, 2)
                     .background(sessionStatusColor(session).opacity(0.12))
                     .clipShape(Capsule())
-
-                if let badge = sessionToolBadge(session) {
-                    Text(badge)
-                        .font(.caption2)
-                        .foregroundColor(Color(NSColor.secondaryLabelColor))
-                }
 
                 Text(relativeTimeString(from: lastActivityDate))
                     .font(.system(size: 10))
@@ -169,7 +173,8 @@ func sessionStatusColor(_ session: DevSession) -> Color {
 /// Returns nil for "claude-code" (no badge = clean default).
 func sessionToolBadge(_ session: DevSession) -> String? {
     switch session.tool {
-    case "cursor": return "Cursor"
-    default: return nil
+    case "cursor":      return "Cursor"
+    case "claude-code": return "Claude"
+    default:            return nil
     }
 }

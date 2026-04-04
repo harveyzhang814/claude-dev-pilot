@@ -14,26 +14,46 @@ public final class PopoverViewModel {
     public var activeSessions: [DevSession] = []
     public var eventsBySession: [String: [DevEvent]] = [:]
 
+    /// Sessions sorted by cwd-group then tool priority.
+    /// Groups are ordered by the most recent startedAt within the group (newest first).
+    /// Within the same cwd: claude-code before cursor, then most recent first.
+    public var sortedActiveSessions: [DevSession] {
+        activeSessions.sorted { a, b in
+            if a.cwd == b.cwd {
+                if a.tool != b.tool { return a.tool == "claude-code" }
+                return a.startedAt > b.startedAt
+            }
+            let aMax = activeSessions.filter { $0.cwd == a.cwd }.map(\.startedAt).max() ?? a.startedAt
+            let bMax = activeSessions.filter { $0.cwd == b.cwd }.map(\.startedAt).max() ?? b.startedAt
+            return aMax > bMax
+        }
+    }
+
     /// Deduplication-aware display names keyed by session id.
     ///
     /// Rules:
     /// - Custom name (`/rename` or `-n`): use as-is.
-    /// - Single session for a project: show just the project name.
-    /// - Multiple sessions sharing the same project name: append tty suffix
+    /// - Single session per (cwd, tool) pair: show just the project name.
+    /// - Multiple sessions with the same (cwd, tool): append tty suffix
     ///   (e.g. "agent-dev-pilot · ttys003") so they're distinguishable.
+    ///   Tool badge handles cwd-same-but-different-tool disambiguation.
     public var displayNames: [String: String] {
-        var projectCount: [String: Int] = [:]
+        var cwdToolCount: [String: Int] = [:]
         for session in activeSessions where session.customName == nil {
-            projectCount[session.project, default: 0] += 1
+            let key = "\(session.cwd)|\(session.tool)"
+            cwdToolCount[key, default: 0] += 1
         }
         return activeSessions.reduce(into: [:]) { result, session in
             if let name = session.customName {
                 result[session.id] = name
-            } else if (projectCount[session.project] ?? 0) > 1 {
-                let ttySuffix = session.tty.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
-                result[session.id] = ttySuffix.isEmpty ? session.project : "\(session.project) · \(ttySuffix)"
             } else {
-                result[session.id] = session.project
+                let key = "\(session.cwd)|\(session.tool)"
+                if (cwdToolCount[key] ?? 0) > 1 {
+                    let ttySuffix = session.tty.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
+                    result[session.id] = ttySuffix.isEmpty ? session.project : "\(session.project) · \(ttySuffix)"
+                } else {
+                    result[session.id] = session.project
+                }
             }
         }
     }

@@ -7,10 +7,22 @@ struct FloatWindowHoverView: View {
     let onFocusSession: (DevSession) -> Void
     let onExpand: () -> Void
 
+    /// Non-stale before stale. Within active sessions: group by cwd (newest cwd
+    /// first), then claude-code before cursor within the same cwd.
     private var sortedSessions: [DevSession] {
-        let nonStale = sessions.filter { $0.status != .stale }
-        let stale = sessions.filter { $0.status == .stale }
-        return nonStale + stale
+        sessions.sorted { a, b in
+            let aActive = a.status != .stale
+            let bActive = b.status != .stale
+            if aActive != bActive { return aActive }
+
+            if a.cwd == b.cwd {
+                if a.tool != b.tool { return a.tool == "claude-code" }
+                return a.startedAt > b.startedAt
+            }
+            let aMax = sessions.filter { $0.cwd == a.cwd }.map(\.startedAt).max() ?? a.startedAt
+            let bMax = sessions.filter { $0.cwd == b.cwd }.map(\.startedAt).max() ?? b.startedAt
+            return aMax > bMax
+        }
     }
 
     var body: some View {
@@ -107,7 +119,7 @@ private struct HoverSessionRowView: View {
                 }
                 .frame(width: 8, height: 8)
 
-                // Session name + optional tool badge
+                // Name + tool badge as a semantic unit
                 HStack(spacing: 4) {
                     Text(session.project)
                         .font(.system(size: 12, weight: .medium))
