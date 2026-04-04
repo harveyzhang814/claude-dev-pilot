@@ -151,8 +151,7 @@ State transitions in `SessionLifecycleService`:
 | `retentionDays` | 30 | Event pruning age |
 | `soundEnabled` | true | Notification sound |
 | `onboardingCompleted` | false | Onboarding gate |
-| `floatWindowX` | — | Saved X origin for float window (persisted across launches) |
-| `floatWindowTopY` | — | Saved top edge Y for float window (persisted across launches) |
+| `floatWindowPositions` | {} | Per-display-config float window positions: `[String: [String: Double]]`. Key = `CGDisplayVendorNumber-CGDisplayModelNumber-CGDisplaySerialNumber` per display, sorted, joined by `\|`. Value = `{x: Double, topY: Double}`. Written on user drag; restored on first show; invalidated if off-screen. |
 | `floatWindowHoverLocked` | false | Hover lock: when true, window stays in hover state and never auto-collapses to compact |
 
 ### notify.sh
@@ -178,7 +177,7 @@ Cursor hooks registered: `sessionStart`, `sessionEnd`, `stop`. Use `HookInstalle
 
 When `isHoverLocked` is true: window skips `compact` entirely (hidden→hover, compact auto-upgrades to hover); mouse exit from `hover` is suppressed; mouse exit from `expanded` still collapses but to `hover` instead of `compact`; `toggleExpanded()` also collapses to `hover`.
 
-The panel renders `FloatWindowCompactView` (compact), `FloatWindowHoverView` (hover), or `MenubarPopover` (expanded). `TrackingView` wraps the content for mouse enter/exit events. Position is persisted via `floatWindowX`/`floatWindowTopY` UserDefaults; the top edge is pinned across height changes (only height changes on expand/collapse).
+The panel renders `FloatWindowCompactView` (compact), `FloatWindowHoverView` (hover), or `MenubarPopover` (expanded). `TrackingView` wraps the content for mouse enter/exit events. Position is persisted per display configuration in `floatWindowPositions` UserDefaults; the top edge is pinned across height changes (only height changes on expand/collapse). On screen configuration change (`NSApplication.didChangeScreenParametersNotification`), the panel is moved to the menubar screen default if the saved position is no longer on any screen.
 
 ## Testing patterns
 

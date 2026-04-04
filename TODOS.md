@@ -2,20 +2,6 @@
 
 ## FloatWindow
 
-### windowDidMove fires during programmatic animation
-
-**Priority:** P2
-**Component:** FloatWindow / FloatWindowController
-
-`windowDidMove` is called by AppKit on every animated frame step, not just on user drags. There is no guard distinguishing a user drag from a programmatic `panel.animator().setFrame(...)` call. As a result, every animated resize (compact→expanded, content height change) writes the intermediate frame's `maxY` to `pinnedTopY` and persists it to `UserDefaults`. On next launch or next transition, the panel can snap to a wrong Y position.
-
-**Fix:** Set an `isProgrammaticResize: Bool` flag before calling `positionPanel(height:animated:)` and clear it in a `NSAnimationContext.completionHandler`. In `windowDidMove`, skip the handler when `isProgrammaticResize == true`.
-
-**File:** `Sources/App/FloatWindow/FloatWindowController.swift` — `windowDidMove` and `positionPanel`
-**Found by:** adversarial review on 2026-04-03 (branch: fix/float-window-height-review)
-
----
-
 ### collapseTimer scheduled on .default run loop mode
 
 **Priority:** P2
@@ -130,6 +116,34 @@ Claude Code hooks log PascalCase names (`"Stop"`, `"SessionStart"`) because `Hoo
 
 **File:** `Sources/Core/Services/HookInstaller.swift` — `cursorAgentPrompt()`
 **Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+
+---
+
+### isProgrammaticResize flag is not ref-counted — overlapping animations can corrupt persisted position
+
+**Priority:** P3
+**Component:** FloatWindow / FloatWindowController
+
+`isProgrammaticResize` is a plain `Bool`. If two `positionPanel(animated: true)` calls overlap (e.g., `updateFromViewModel` and `handleScreenParametersChanged` fire within 200ms), the first animation's `completionHandler` clears the flag while the second animation is still running. `windowDidMove` then fires with the flag `false` and writes an intermediate animation frame to UserDefaults.
+
+**Fix:** Replace the `Bool` with a nesting counter (`isProgrammaticResizeCount: Int`). Increment before each animated call, decrement in the completion handler. Guard as `count > 0`.
+
+**File:** `Sources/App/FloatWindow/FloatWindowController.swift` — `positionPanel`, `isProgrammaticResize`
+**Found by:** adversarial review on 2026-04-05 (branch: feat/float-window-position-persist)
+
+---
+
+### floatWindowPositions UserDefaults dict grows unbounded; no schema versioning
+
+**Priority:** P3
+**Component:** FloatWindow / FloatWindowController
+
+`floatWindowPositions` accumulates one entry per unique display configuration encountered (home, office, conference room, client screens). Entries are never pruned. More critically, there is no schema version field — if the position format changes in a future release, old entries silently match the `if let savedX = entry["x"]` check and return semantically wrong coordinates.
+
+**Fix:** Cap at e.g. 20 entries (LRU eviction by access timestamp), or add a top-level `version` key. Write a migration path in `positionPanel`'s first-show branch.
+
+**File:** `Sources/App/FloatWindow/FloatWindowController.swift` — `positionPanel`, `windowDidMove`
+**Found by:** adversarial review on 2026-04-05 (branch: feat/float-window-position-persist)
 
 ---
 
