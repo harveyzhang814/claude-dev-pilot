@@ -121,7 +121,6 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         case .expanded: newState = .expanded
         }
 
-        let oldState = currentState
         currentState = newState
 
         if newState == .hidden {
@@ -146,16 +145,16 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         let height = targetHeight(for: newState)
-
-        if oldState == .hover && newState == .compact {
-            // Delay mode switch until the panel animation completes. If displayState.mode
-            // is set to .compact immediately, SwiftUI switches to the compact pill while
-            // the panel is still at hover height — the pill centers itself in the oversized
-            // panel and appears at the wrong (lower) position, causing a visible double-jump.
-            // Keeping .hover content during the animation and switching at the end gives a
-            // natural "panel collapses, then pill appears" feel.
+        // Collapsing (panel shrinks): keep current content visible during the animation,
+        // switch displayState.mode only after the animation completes. This prevents the
+        // incoming (smaller) view from centering itself in an oversized panel mid-animation
+        // and appearing at the wrong position. Applies to hover→compact, expanded→compact,
+        // expanded→hover, and any future collapsing transition automatically.
+        // Expanding: switch content first so SwiftUI renders at full target size immediately.
+        let isCollapsing = panel.isVisible && height < panel.frame.height
+        if isCollapsing {
             positionPanel(height: height, animated: true) { [weak self] in
-                guard let self, self.currentState == .compact else { return }
+                guard let self, self.currentState == newState else { return }
                 self.displayState.mode = newMode
             }
         } else {
