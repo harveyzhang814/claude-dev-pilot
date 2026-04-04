@@ -332,7 +332,8 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     }
 
     private func handleMouseExit() {
-        guard !displayState.isHoverLocked else { return }
+        // When locked and already in hover, mouse exit has no effect.
+        if displayState.isHoverLocked && currentState == .hover { return }
         if currentState == .hover || currentState == .expanded { scheduleCollapse() }
     }
 
@@ -342,7 +343,14 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             Task { @MainActor [weak self] in
                 guard let self, self.isObserving,
                       self.currentState == .hover || self.currentState == .expanded else { return }
-                let next: FloatWindowDisplayState.Mode = self.viewModel.activeSessions.isEmpty ? .hidden : .compact
+                let next: FloatWindowDisplayState.Mode
+                if self.viewModel.activeSessions.isEmpty {
+                    next = .hidden
+                } else if self.displayState.isHoverLocked {
+                    next = .hover
+                } else {
+                    next = .compact
+                }
                 self.transition(to: next)
             }
         }
