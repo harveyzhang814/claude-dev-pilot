@@ -130,11 +130,12 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         if newState == .expanded {
-            // Use fittingSize for the initial height (synchronous, no flash).
-            // startObservingContentHeight() handles subsequent dynamic changes.
-            hostingView.layoutSubtreeIfNeeded()
-            let initialHeight = Self.clampedExpandedHeight(hostingView.fittingSize.height)
-            positionPanel(height: initialHeight, animated: panel.isVisible)
+            // Start at maxExpandedHeight so SwiftUI can render MenubarPopover at full size.
+            // startObservingContentHeight() will resize down once GeometryReader reports
+            // the actual content height. Using fittingSize here is unreliable because
+            // SwiftUI re-renders asynchronously — fittingSize returns the old compact/hover
+            // size, which gets clamped to minExpandedHeight and traps the GeometryReader.
+            positionPanel(height: Self.maxExpandedHeight, animated: panel.isVisible)
             if !panel.isVisible {
                 panel.orderFront(nil)
             }
