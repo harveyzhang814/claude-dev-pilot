@@ -8,6 +8,9 @@ public struct HookLog: Codable, Identifiable, Sendable, FetchableRecord, Persist
     public let sessionId: String
     public let notificationType: String?
     public let rawPayload: String
+    /// Which HTTP endpoint received this request: "/event" or "/cursor-event".
+    /// Nil for rows written before v9 migration.
+    public let endpoint: String?
 
     public static let databaseTableName = "hook_logs"
 
@@ -18,6 +21,7 @@ public struct HookLog: Codable, Identifiable, Sendable, FetchableRecord, Persist
         case sessionId = "session_id"
         case notificationType = "notification_type"
         case rawPayload = "raw_payload"
+        case endpoint
     }
 
     public enum CodingKeys: String, CodingKey {
@@ -27,6 +31,7 @@ public struct HookLog: Codable, Identifiable, Sendable, FetchableRecord, Persist
         case sessionId = "session_id"
         case notificationType = "notification_type"
         case rawPayload = "raw_payload"
+        case endpoint
     }
 
     public init(
@@ -35,7 +40,8 @@ public struct HookLog: Codable, Identifiable, Sendable, FetchableRecord, Persist
         hookEventName: String,
         sessionId: String,
         notificationType: String?,
-        rawPayload: String
+        rawPayload: String,
+        endpoint: String? = nil
     ) {
         self.id = id
         self.receivedAt = receivedAt
@@ -43,5 +49,6 @@ public struct HookLog: Codable, Identifiable, Sendable, FetchableRecord, Persist
         self.sessionId = sessionId
         self.notificationType = notificationType
         self.rawPayload = rawPayload
+        self.endpoint = endpoint
     }
 }

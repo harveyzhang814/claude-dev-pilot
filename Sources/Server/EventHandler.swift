@@ -33,7 +33,8 @@ enum EventHandler {
                 hookEventName: payload?.hookEventName ?? "PARSE_ERROR",
                 sessionId: payload?.sessionId ?? "",
                 notificationType: payload?.notificationType,
-                rawPayload: rawPayload
+                rawPayload: rawPayload,
+                endpoint: "/event"
             )
             try? await db.write { db in try log.insert(db) }
 
@@ -104,7 +105,8 @@ enum EventHandler {
                 hookEventName: cursorPayload?.hookEventName ?? "PARSE_ERROR",
                 sessionId: cursorPayload?.sessionId ?? "",
                 notificationType: nil,
-                rawPayload: rawPayload
+                rawPayload: rawPayload,
+                endpoint: "/cursor-event"
             )
             try? await db.write { db in try log.insert(db) }
 

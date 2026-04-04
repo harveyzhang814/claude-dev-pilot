@@ -119,6 +119,12 @@ public enum DatabaseManager {
                           columns: ["received_at"], ifNotExists: true)
         }
 
+        migrator.registerMigration("v9_hook_log_endpoint") { db in
+            try db.alter(table: "hook_logs") { t in
+                t.add(column: "endpoint", .text)
+            }
+        }
+
         try migrator.migrate(db)
     }
 
