@@ -121,6 +121,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         case .expanded: newState = .expanded
         }
 
+        let oldState = currentState
         currentState = newState
         displayState.mode = newMode
 
@@ -144,7 +145,13 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         let height = targetHeight(for: newState)
-        positionPanel(height: height, animated: panel.isVisible)
+        // hover → compact: skip animation. displayState.mode is already set to .compact,
+        // so SwiftUI will switch to the compact pill during the animation — the pill
+        // centers itself in the oversized panel and appears at the wrong (lower) position
+        // until the animation completes, causing a visible double-jump. Instant resize
+        // avoids this entirely.
+        let animate = panel.isVisible && !(oldState == .hover && newState == .compact)
+        positionPanel(height: height, animated: animate)
 
         if !panel.isVisible {
             panel.orderFront(nil)
