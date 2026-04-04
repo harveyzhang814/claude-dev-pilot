@@ -100,7 +100,8 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
 | `AppState` | App | `@Observable` root object. Owns DB, server task, batcher, stale timer |
 | `PopoverViewModel` | App/ViewModels | Single atomic `ValueObservation` populates `activeSessions: [DevSession]` (idle+busy+waiting, startedAt desc) and `eventsBySession: [String: [DevEvent]]` together. Also keeps `activeSessionCount`/`sessionStartTimes` for backward compat |
 | `SessionPanelViewModel` | App/ViewModels | Separate `ValueObservation` for the session panel, splits all sessions into `activeSessions`, `completedSessions`, `staleSessions` |
-| `FloatWindowController` | App/FloatWindow | Owns the floating `NSPanel`; drives `hidden/compact/hover/expanded` state machine. Reacts to `PopoverViewModel` changes and mouse tracking |
+| `FloatWindowController` | App/FloatWindow | Owns the floating `NSPanel`; drives `hidden/compact/hover/expanded` state machine. Reacts to `PopoverViewModel` changes and mouse tracking. `toggleHoverLock()` flips `isHoverLocked` and immediately upgrades compact→hover |
+| `FloatWindowDisplayState` | App/FloatWindow | `@Observable` bridge: `mode`, `contentHeight`, and `isHoverLocked` (persisted to UserDefaults key `floatWindowHoverLocked`) |
 | `TerminalFocusService` | App/Services | Routes focus requests to `GhosttyFocuser` or `TerminalAppFocuser` based on `session.terminalApp` |
 | `SessionGroupView` | App/Views | Renders one session group: header row (status dot + project name + capsule tag + optional tool badge) + `EventCardView` list or "Working..." placeholder. `sessionStatusTag`/`sessionStatusColor`/`sessionToolBadge` are internal free functions (not private, accessible via `@testable`) |
 | `MenubarPopover` | App/Views | Session-grouped popover: `ForEach(activeSessions)` → `SessionGroupView` with dividers; empty state shows `terminal` SF symbol |
@@ -152,6 +153,7 @@ State transitions in `SessionLifecycleService`:
 | `onboardingCompleted` | false | Onboarding gate |
 | `floatWindowX` | — | Saved X origin for float window (persisted across launches) |
 | `floatWindowTopY` | — | Saved top edge Y for float window (persisted across launches) |
+| `floatWindowHoverLocked` | false | Hover lock: when true, window stays in hover state and never auto-collapses to compact |
 
 ### notify.sh
 
@@ -173,6 +175,8 @@ Cursor hooks registered: `sessionStart`, `sessionEnd`, `stop`. Use `HookInstalle
 - `hover` / `expanded` → `compact` (on mouse exit after 1s delay)
 - `compact` / `hover` → `expanded` (on click/tap or notification card tap)
 - `expanded` → `compact` / `hidden` (on toggle or mouse exit)
+
+When `isHoverLocked` is true: window skips `compact` entirely (hidden→hover, compact auto-upgrades to hover); mouse exit from `hover` is suppressed; mouse exit from `expanded` still collapses but to `hover` instead of `compact`; `toggleExpanded()` also collapses to `hover`.
 
 The panel renders `FloatWindowCompactView` (compact), `FloatWindowHoverView` (hover), or `MenubarPopover` (expanded). `TrackingView` wraps the content for mouse enter/exit events. Position is persisted via `floatWindowX`/`floatWindowTopY` UserDefaults; the top edge is pinned across height changes (only height changes on expand/collapse).
 
