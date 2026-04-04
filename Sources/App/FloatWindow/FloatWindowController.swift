@@ -18,7 +18,14 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         case .compact, .hover:
             transition(to: .expanded)
         case .expanded:
-            let next: FloatWindowDisplayState.Mode = viewModel.activeSessions.isEmpty ? .hidden : .compact
+            let next: FloatWindowDisplayState.Mode
+            if viewModel.activeSessions.isEmpty {
+                next = .hidden
+            } else if displayState.isHoverLocked {
+                next = .hover
+            } else {
+                next = .compact
+            }
             transition(to: next)
         }
     }
@@ -29,6 +36,13 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         collapseTimer = nil
         pinnedTopY = nil
         panel.orderOut(nil)
+    }
+
+    func toggleHoverLock() {
+        displayState.isHoverLocked.toggle()
+        if displayState.isHoverLocked && currentState == .compact {
+            transition(to: .hover)
+        }
     }
 
     // MARK: - Init
@@ -88,6 +102,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             displayState: displayState,
             viewModel: viewModel,
             onExpand: { [weak self] in self?.transition(to: .expanded) },
+            onToggleLock: { [weak self] in self?.toggleHoverLock() },
             onFocusSession: onFocusSession,
             onContentHeight: { [weak self] h in
                 Task { @MainActor [weak self] in self?.displayState.contentHeight = h }
@@ -283,10 +298,14 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     private func updateFromViewModel(hasSessions: Bool, hasEvents: Bool) {
         switch currentState {
         case .hidden:
-            if hasSessions && hasEvents { transition(to: .compact) }
+            if hasSessions && hasEvents {
+                transition(to: displayState.isHoverLocked ? .hover : .compact)
+            }
         case .compact:
             if !hasEvents || !hasSessions {
                 transition(to: .hidden)
+            } else if displayState.isHoverLocked {
+                transition(to: .hover)
             } else {
                 // Re-size if event count changed
                 let h = targetHeight(for: .compact)
@@ -313,6 +332,9 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     }
 
     private func handleMouseExit() {
+        // When locked and in hover, mouse exit has no effect — stay in hover.
+        // When locked and in expanded, still collapse (scheduleCollapse resolves to .hover, not .compact).
+        if displayState.isHoverLocked && currentState == .hover { return }
         if currentState == .hover || currentState == .expanded { scheduleCollapse() }
     }
 
@@ -322,7 +344,14 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             Task { @MainActor [weak self] in
                 guard let self, self.isObserving,
                       self.currentState == .hover || self.currentState == .expanded else { return }
-                let next: FloatWindowDisplayState.Mode = self.viewModel.activeSessions.isEmpty ? .hidden : .compact
+                let next: FloatWindowDisplayState.Mode
+                if self.viewModel.activeSessions.isEmpty {
+                    next = .hidden
+                } else if self.displayState.isHoverLocked {
+                    next = .hover
+                } else {
+                    next = .compact
+                }
                 self.transition(to: next)
             }
         }
@@ -342,6 +371,7 @@ private struct FloatWindowRootView: View {
     let displayState: FloatWindowDisplayState
     let viewModel: PopoverViewModel
     let onExpand: () -> Void
+    let onToggleLock: () -> Void
     let onFocusSession: (DevSession) -> Void
     let onContentHeight: (CGFloat) -> Void
 
@@ -370,7 +400,9 @@ private struct FloatWindowRootView: View {
                 sessions: viewModel.activeSessions,
                 eventsBySession: viewModel.eventsBySession,
                 onFocusSession: onFocusSession,
-                onExpand: onExpand
+                onExpand: onExpand,
+                isLocked: displayState.isHoverLocked,
+                onToggleLock: onToggleLock
             )
         case .expanded:
             MenubarPopover(

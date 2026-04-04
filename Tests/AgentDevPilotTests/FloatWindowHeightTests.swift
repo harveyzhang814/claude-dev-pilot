@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AgentDevPilot
 
@@ -29,5 +30,28 @@ struct FloatWindowHeightTests {
 
     @Test func clampedExpandedHeight_negative_fallsBackToMax() {
         #expect(FloatWindowController.clampedExpandedHeight(-10) == 480)
+    }
+
+    // MARK: - isHoverLocked persistence
+
+    @Test @MainActor func isHoverLocked_defaultsFalse() {
+        UserDefaults.standard.removeObject(forKey: "floatWindowHoverLocked")
+        let state = FloatWindowDisplayState()
+        #expect(state.isHoverLocked == false)
+    }
+
+    @Test @MainActor func isHoverLocked_loadsFromUserDefaults() {
+        UserDefaults.standard.set(true, forKey: "floatWindowHoverLocked")
+        let state = FloatWindowDisplayState()
+        #expect(state.isHoverLocked == true)
+        UserDefaults.standard.removeObject(forKey: "floatWindowHoverLocked")
+    }
+
+    @Test @MainActor func isHoverLocked_persistsOnSet() {
+        UserDefaults.standard.removeObject(forKey: "floatWindowHoverLocked")
+        let state = FloatWindowDisplayState()
+        state.isHoverLocked = true
+        #expect(UserDefaults.standard.bool(forKey: "floatWindowHoverLocked") == true)
+        UserDefaults.standard.removeObject(forKey: "floatWindowHoverLocked")
     }
 }
