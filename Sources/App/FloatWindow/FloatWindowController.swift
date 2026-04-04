@@ -135,7 +135,8 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             // the actual content height. Using fittingSize here is unreliable because
             // SwiftUI re-renders asynchronously — fittingSize returns the old compact/hover
             // size, which gets clamped to minExpandedHeight and traps the GeometryReader.
-            positionPanel(height: Self.maxExpandedHeight, animated: panel.isVisible)
+            // No animation on expand — instant appearance feels more responsive.
+            positionPanel(height: Self.maxExpandedHeight, animated: false)
             if !panel.isVisible {
                 panel.orderFront(nil)
             }
@@ -247,7 +248,9 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             if currentState == .expanded, h > 0 {
                 let clamped = Self.clampedExpandedHeight(h)
                 if abs(clamped - panel.frame.height) > 1 {
-                    positionPanel(height: clamped, animated: true)
+                    // No animation — this correction fires right after expand,
+                    // so animating it causes a visible "expand then shrink" jitter.
+                    positionPanel(height: clamped, animated: false)
                 }
             }
         } onChange: {
