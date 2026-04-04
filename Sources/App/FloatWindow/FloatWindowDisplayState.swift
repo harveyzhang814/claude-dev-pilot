@@ -10,4 +10,8 @@ final class FloatWindowDisplayState {
     var mode: Mode = .hidden
     /// Reported by the SwiftUI content via GeometryReader after each render.
     var contentHeight: CGFloat = 0
+    /// When true, the window stays in hover state and never auto-collapses to compact.
+    var isHoverLocked: Bool = UserDefaults.standard.bool(forKey: "floatWindowHoverLocked") {
+        didSet { UserDefaults.standard.set(isHoverLocked, forKey: "floatWindowHoverLocked") }
+    }
 }
