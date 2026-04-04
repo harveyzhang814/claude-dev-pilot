@@ -76,14 +76,18 @@ public actor StopWindowService {
                     """,
                 arguments: [newStatus.rawValue, sessionId]
             )
-            if newStatus == .idle {
+            // Only insert the ready card if we actually updated the session row.
+            // db.changesCount == 0 means the session was already completed/stale — skip
+            // to avoid inserting phantom agentStopped events into closed sessions.
+            if newStatus == .idle && db.changesCount > 0 {
                 // Persist a review-tier event so the popover shows a green "ready" card
                 if let session = try DevSession.fetchOne(db, key: sessionId) {
+                    let readyTitle = session.tool == "cursor" ? "Cursor is ready" : "Claude is ready"
                     let event = DevEvent(
                         id: UUID().uuidString,
                         sessionId: sessionId,
                         type: .agentStopped,
-                        title: "Claude is ready",
+                        title: readyTitle,
                         detail: session.cwd,
                         payload: "{}",
                         tokenCount: nil,

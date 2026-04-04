@@ -7,12 +7,7 @@ import Core
 public enum EventServer {
 
     /// Builds the Hummingbird Application with routes and middleware configured.
-    ///
-    /// - Parameters:
-    ///   - db: Database writer for persisting events.
-    ///   - authToken: Bearer token required for authenticated routes.
-    ///   - onEvent: Callback invoked after each event is persisted.
-    /// - Returns: Configured `Application`.
+    /// Used by tests (does not bind to a port).
     public static func buildApp(
         db: any DatabaseWriter & Sendable,
         authToken: String,
@@ -20,9 +15,7 @@ public enum EventServer {
         onEvent: @Sendable @escaping (DevEvent) -> Void
     ) -> some ApplicationProtocol {
         let router = Router()
-        router.middlewares.add(AuthMiddleware(expectedToken: authToken))
-        router.get("/health", use: EventHandler.getHealth())
-        router.post("/event", use: EventHandler.postEvent(db: db, stopWindow: stopWindow, onEvent: onEvent))
+        configureRoutes(router, db: db, authToken: authToken, stopWindow: stopWindow, onEvent: onEvent)
         return Application(router: router)
     }
 
@@ -35,10 +28,25 @@ public enum EventServer {
         onEvent: @Sendable @escaping (DevEvent) -> Void
     ) -> some ApplicationProtocol {
         let router = Router()
+        configureRoutes(router, db: db, authToken: authToken, stopWindow: stopWindow, onEvent: onEvent)
+        let config = ApplicationConfiguration(address: .hostname("127.0.0.1", port: port))
+        return Application(router: router, configuration: config)
+    }
+
+    // MARK: - Private
+
+    /// Registers all routes and middleware on the given router.
+    /// Single source of truth — both buildApp() and start() call this.
+    private static func configureRoutes(
+        _ router: Router<BasicRequestContext>,
+        db: any DatabaseWriter & Sendable,
+        authToken: String,
+        stopWindow: StopWindowService,
+        onEvent: @Sendable @escaping (DevEvent) -> Void
+    ) {
         router.middlewares.add(AuthMiddleware(expectedToken: authToken))
         router.get("/health", use: EventHandler.getHealth())
         router.post("/event", use: EventHandler.postEvent(db: db, stopWindow: stopWindow, onEvent: onEvent))
-        let config = ApplicationConfiguration(address: .hostname("127.0.0.1", port: port))
-        return Application(router: router, configuration: config)
+        router.post("/cursor-event", use: EventHandler.postCursorEvent(db: db, stopWindow: stopWindow, onEvent: onEvent))
     }
 }

@@ -45,7 +45,8 @@ public final class NotificationBatcher: @unchecked Sendable {
 
     /// Directly emits an idle notification for a session, bypassing batch accumulation.
     /// Respects global rate limiting.
-    public func submitIdle(sessionId: String, project: String) {
+    public func submitIdle(sessionId: String, project: String, tool: String = "claude-code") {
+        let body = tool == "cursor" ? "Cursor is ready" : "Claude is ready"
         emitNotification(Notification(
             event: nil,
             sessionId: sessionId,
@@ -53,7 +54,7 @@ public final class NotificationBatcher: @unchecked Sendable {
             isBatched: false,
             isSummary: false,
             title: project,
-            body: "Claude is ready"
+            body: body
         ))
     }
 

@@ -104,10 +104,12 @@ public final class AppState {
         let resolvedPort = port > 0 ? port : 9876
         let batcher = self.batcher
         let stopWindow = StopWindowService(db: dbPool, onIdleResolved: { sessionId in
-            let project = (try? dbPool.read { db in
-                try DevSession.fetchOne(db, key: sessionId)?.project
-            }) ?? "unknown"
-            batcher?.submitIdle(sessionId: sessionId, project: project)
+            let session = try? dbPool.read { db in
+                try DevSession.fetchOne(db, key: sessionId)
+            }
+            let project = session?.project ?? "unknown"
+            let tool = session?.tool ?? "claude-code"
+            batcher?.submitIdle(sessionId: sessionId, project: project, tool: tool)
         })
 
         serverTask = Task.detached(priority: .background) {

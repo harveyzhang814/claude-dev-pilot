@@ -433,4 +433,26 @@ struct SessionLifecycleTests {
         }
         #expect(undismissed == 0)
     }
+
+    // MARK: - processEvent tool parameter tests
+
+    @Test("processEvent fallback creates session with default tool=claude-code")
+    func processEventFallbackDefaultTool() throws {
+        let db = try makeDB()
+        let event = makeEvent(sessionId: "fallback-cc", type: .agentStopped)
+        try SessionLifecycleService.processEvent(event, in: db)
+
+        let session = try SessionStore.fetch(id: "fallback-cc", in: db)
+        #expect(session?.tool == "claude-code")
+    }
+
+    @Test("processEvent fallback with tool=cursor creates session with tool=cursor")
+    func processEventFallbackCursorTool() throws {
+        let db = try makeDB()
+        let event = makeEvent(sessionId: "fallback-cursor", type: .agentStopped)
+        try SessionLifecycleService.processEvent(event, tool: "cursor", in: db)
+
+        let session = try SessionStore.fetch(id: "fallback-cursor", in: db)
+        #expect(session?.tool == "cursor")
+    }
 }

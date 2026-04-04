@@ -14,10 +14,10 @@ public enum SessionLifecycleService {
             switch payload.hookEventName {
             case "SessionStart":
                 if let session = existing {
-                    // Always refresh location/terminal info in case Claude Code restarted
+                    // Always refresh location/terminal info in case the tool restarted
                     try db.execute(
-                        sql: "UPDATE sessions SET cwd = ?, tty = ?, terminal_app = ? WHERE id = ?",
-                        arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.sessionId]
+                        sql: "UPDATE sessions SET cwd = ?, tty = ?, terminal_app = ?, tool = ? WHERE id = ?",
+                        arguments: [payload.cwd, payload.tty, payload.terminalApp, payload.tool ?? "claude-code", payload.sessionId]
                     )
                     // Update custom_name only when explicitly provided (don't clear a prior rename)
                     if let title = payload.title {
@@ -42,7 +42,7 @@ public enum SessionLifecycleService {
                         cwd: payload.cwd,
                         tty: payload.tty,
                         terminalApp: payload.terminalApp,
-                        tool: "claude-code",
+                        tool: payload.tool ?? "claude-code",
                         status: .idle,
                         startedAt: Date(),
                         endedAt: nil,
@@ -69,12 +69,17 @@ public enum SessionLifecycleService {
 
     /// Processes a DevEvent: creates/updates the session, inserts the event, transitions session state.
     ///
+    /// - Parameters:
+    ///   - tool: The originating tool ("claude-code" or "cursor"). Used only when creating a
+    ///           fallback session (i.e., the app missed the SessionStart hook). Defaults to
+    ///           "claude-code" for backward compatibility with existing callers.
+    ///
     /// State transitions:
     ///   - `promptSubmitted`  → `busy`
     ///   - `permissionNeeded` → `waiting`
     ///   - `agentStopped`     → no change (StopWindowService resolves idle/waiting after window)
     ///   - `authSuccess`      → no change (record-only)
-    public static func processEvent(_ event: DevEvent, sessionTitle: String? = nil, in db: any DatabaseWriter) throws {
+    public static func processEvent(_ event: DevEvent, sessionTitle: String? = nil, tool: String = "claude-code", in db: any DatabaseWriter) throws {
         try db.write { db in
             let existingSession = try DevSession.fetchOne(db, key: event.sessionId)
 
@@ -138,7 +143,7 @@ public enum SessionLifecycleService {
                 var session = DevSession(
                     id: event.sessionId, project: project,
                     cwd: cwd,
-                    tool: "claude-code", status: initialStatus, startedAt: Date(),
+                    tool: tool, status: initialStatus, startedAt: Date(),
                     endedAt: nil, totalTokens: event.tokenCount, lastEventTitle: event.title
                 )
                 try session.insert(db)

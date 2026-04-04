@@ -96,6 +96,12 @@ private struct SessionHeaderRow: View {
                     .background(sessionStatusColor(session).opacity(0.12))
                     .clipShape(Capsule())
 
+                if let badge = sessionToolBadge(session) {
+                    Text(badge)
+                        .font(.caption2)
+                        .foregroundColor(Color(NSColor.secondaryLabelColor))
+                }
+
                 Text(relativeTimeString(from: lastActivityDate))
                     .font(.system(size: 10))
                     .foregroundColor(Color(NSColor.tertiaryLabelColor))
@@ -156,5 +162,14 @@ func sessionStatusColor(_ session: DevSession) -> Color {
     case .idle:      return Color(red: 1.0, green: 0.624, blue: 0.039)   // #FF9F0A amber
     case .stale:     return Color(red: 0.388, green: 0.388, blue: 0.392) // #636366 gray
     case .completed: return Color(red: 0.388, green: 0.388, blue: 0.392) // #636366 gray
+    }
+}
+
+/// Returns a tool badge string for non-Claude Code sessions.
+/// Returns nil for "claude-code" (no badge = clean default).
+func sessionToolBadge(_ session: DevSession) -> String? {
+    switch session.tool {
+    case "cursor": return "Cursor"
+    default: return nil
     }
 }

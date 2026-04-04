@@ -14,12 +14,10 @@ enum EventHandler {
         onEvent: @Sendable @escaping (DevEvent) -> Void
     ) -> @Sendable (Request, BasicRequestContext) async throws -> Response {
         return { @Sendable request, context in
-            // Collect body (max 64 KB)
             let buffer = try await request.body.collect(upTo: 64 * 1024)
             let data = Data(buffer: buffer)
             let rawPayload = String(data: data, encoding: .utf8) ?? "[non-UTF-8 body]"
 
-            // Parse HookPayload
             let payload: HookPayload?
             let parseError: Error?
             do {
@@ -30,35 +28,51 @@ enum EventHandler {
                 parseError = e
             }
 
-            // Insert HookLog with final state (fire-and-forget)
+            // If HookPayload decode failed, check whether it's a Cursor-format payload
+            // delivered to the wrong endpoint. Cursor (or its extensions) appear to
+            // POST agent events to /event in addition to /cursor-event. Log it with a
+            // dedicated event name and return 200 OK to avoid noisy 400 errors.
+            if parseError != nil,
+               let _ = try? JSONDecoder().decode(CursorHookPayload.self, from: data) {
+                let misdirectedLog = HookLog(
+                    receivedAt: Date(),
+                    hookEventName: "cursor_misdirected",
+                    sessionId: "",
+                    notificationType: nil,
+                    rawPayload: rawPayload,
+                    endpoint: "/event"
+                )
+                try? await db.write { db in try misdirectedLog.insert(db) }
+                return Response(status: .ok, headers: [:], body: .init())
+            }
+
             let log = HookLog(
                 receivedAt: Date(),
                 hookEventName: payload?.hookEventName ?? "PARSE_ERROR",
                 sessionId: payload?.sessionId ?? "",
                 notificationType: payload?.notificationType,
-                rawPayload: rawPayload
+                rawPayload: rawPayload,
+                endpoint: "/event"
             )
             try? await db.write { db in try log.insert(db) }
 
-            // If parse failed, return 400
             if let error = parseError {
                 throw HTTPError(.badRequest, message: "Invalid JSON payload: \(error.localizedDescription)")
             }
 
-            // payload is guaranteed non-nil here: parseError guard above ensures decode succeeded
             let decoded = payload!
 
-            // SessionStart / SessionEnd → lifecycle only, no DevEvent
             if decoded.hookEventName == "SessionStart" || decoded.hookEventName == "SessionEnd" {
                 try SessionLifecycleService.handleSessionLifecycle(payload: decoded, in: db)
                 return Response(status: .ok, headers: [:], body: .init())
             }
 
-            // Map payload → DevEvent and persist
             let event = EventMapper.map(decoded)
-            try SessionLifecycleService.processEvent(event, sessionTitle: decoded.title, in: db)
+            // Always use "claude-code" — do not trust the tool field from the wire.
+            // The /event endpoint is exclusively for Claude Code hooks; tool identity
+            // is determined by endpoint, not by the client-supplied payload.
+            try SessionLifecycleService.processEvent(event, sessionTitle: decoded.title, tool: "claude-code", in: db)
 
-            // Feed Stop and Notification events into the stop window
             switch decoded.hookEventName {
             case "Stop":
                 await stopWindow.recordStop(sessionId: decoded.sessionId)
@@ -75,9 +89,73 @@ enum EventHandler {
                 break
             }
 
-            // Notify callback (drives NotificationBatcher → native notifications)
             onEvent(event)
+            return Response(status: .ok, headers: [:], body: .init())
+        }
+    }
 
+    /// POST /cursor-event — receives a CursorHookPayload, normalizes it to HookPayload,
+    /// then routes through the shared pipeline identical to /event.
+    static func postCursorEvent(
+        db: any DatabaseWriter & Sendable,
+        stopWindow: StopWindowService,
+        onEvent: @Sendable @escaping (DevEvent) -> Void
+    ) -> @Sendable (Request, BasicRequestContext) async throws -> Response {
+        return { @Sendable request, context in
+            let buffer = try await request.body.collect(upTo: 64 * 1024)
+            let data = Data(buffer: buffer)
+            let rawPayload = String(data: data, encoding: .utf8) ?? "[non-UTF-8 body]"
+
+            // Parse as CursorHookPayload (Cursor-specific wire format)
+            let cursorPayload: CursorHookPayload?
+            let parseError: Error?
+            do {
+                cursorPayload = try JSONDecoder().decode(CursorHookPayload.self, from: data)
+                parseError = nil
+            } catch let e {
+                cursorPayload = nil
+                parseError = e
+            }
+
+            // Log raw payload before normalization (preserves original camelCase names)
+            let log = HookLog(
+                receivedAt: Date(),
+                hookEventName: cursorPayload?.hookEventName ?? "PARSE_ERROR",
+                sessionId: cursorPayload?.sessionId ?? "",
+                notificationType: nil,
+                rawPayload: rawPayload,
+                endpoint: "/cursor-event"
+            )
+            try? await db.write { db in try log.insert(db) }
+
+            if let error = parseError {
+                throw HTTPError(.badRequest, message: "Invalid JSON payload: \(error.localizedDescription)")
+            }
+
+            let cursor = cursorPayload!
+
+            // Normalize Cursor payload → shared HookPayload (injects tool="cursor", PascalCase names)
+            let decoded = CursorNormalizer.normalize(cursor)
+
+            if decoded.hookEventName == "SessionStart" || decoded.hookEventName == "SessionEnd" {
+                try SessionLifecycleService.handleSessionLifecycle(payload: decoded, in: db)
+                return Response(status: .ok, headers: [:], body: .init())
+            }
+
+            // Only handle known event types. Unknown events (future Cursor hooks) are
+            // silently acknowledged to avoid creating spurious agentStopped events.
+            guard decoded.hookEventName == "Stop" else {
+                return Response(status: .ok, headers: [:], body: .init())
+            }
+
+            let event = EventMapper.map(decoded)
+            // Pass tool="cursor" explicitly so the fallback session path tags correctly
+            try SessionLifecycleService.processEvent(event, sessionTitle: nil, tool: "cursor", in: db)
+
+            // Feed stop into the window; Cursor has no Notification hook equivalent
+            await stopWindow.recordStop(sessionId: decoded.sessionId)
+
+            onEvent(event)
             return Response(status: .ok, headers: [:], body: .init())
         }
     }
