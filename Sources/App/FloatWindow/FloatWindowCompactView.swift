@@ -11,8 +11,7 @@ struct FloatWindowCompactView: View {
         HStack(spacing: 5) {
             ForEach(Array(sessions.prefix(5))) { session in
                 StatusDot(color: sessionStatusColor(session),
-                          isPulsing: session.status == .waiting,
-                          isCursor: session.tool == "cursor")
+                          isPulsing: session.status == .waiting)
             }
         }
         .padding(.horizontal, 10)
@@ -26,28 +25,18 @@ struct FloatWindowCompactView: View {
 private struct StatusDot: View {
     let color: Color
     let isPulsing: Bool
-    /// Cursor sessions use a rounded square instead of a circle.
-    let isCursor: Bool
     @State private var animating = false
 
     var body: some View {
-        Group {
-            if isCursor {
-                RoundedRectangle(cornerRadius: 2.5)
-                    .fill(color)
-                    .frame(width: 8, height: 8)
-            } else {
-                Circle()
-                    .fill(color)
-                    .frame(width: 8, height: 8)
+        Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .opacity(isPulsing ? (animating ? 0.2 : 1.0) : 1.0)
+            .onAppear {
+                guard isPulsing else { return }
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    animating = true
+                }
             }
-        }
-        .opacity(isPulsing ? (animating ? 0.2 : 1.0) : 1.0)
-        .onAppear {
-            guard isPulsing else { return }
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                animating = true
-            }
-        }
     }
 }

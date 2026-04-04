@@ -30,7 +30,7 @@ struct MenubarPopover: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(viewModel.activeSessions.enumerated()), id: \.element.id) { index, session in
+                        ForEach(Array(viewModel.sortedActiveSessions.enumerated()), id: \.element.id) { index, session in
                             if index > 0 {
                                 Divider()
                                     .padding(.vertical, 2)
