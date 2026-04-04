@@ -119,4 +119,32 @@ Claude Code hooks log PascalCase names (`"Stop"`, `"SessionStart"`) because `Hoo
 
 ---
 
+### isProgrammaticResize flag is not ref-counted — overlapping animations can corrupt persisted position
+
+**Priority:** P3
+**Component:** FloatWindow / FloatWindowController
+
+`isProgrammaticResize` is a plain `Bool`. If two `positionPanel(animated: true)` calls overlap (e.g., `updateFromViewModel` and `handleScreenParametersChanged` fire within 200ms), the first animation's `completionHandler` clears the flag while the second animation is still running. `windowDidMove` then fires with the flag `false` and writes an intermediate animation frame to UserDefaults.
+
+**Fix:** Replace the `Bool` with a nesting counter (`isProgrammaticResizeCount: Int`). Increment before each animated call, decrement in the completion handler. Guard as `count > 0`.
+
+**File:** `Sources/App/FloatWindow/FloatWindowController.swift` — `positionPanel`, `isProgrammaticResize`
+**Found by:** adversarial review on 2026-04-05 (branch: feat/float-window-position-persist)
+
+---
+
+### floatWindowPositions UserDefaults dict grows unbounded; no schema versioning
+
+**Priority:** P3
+**Component:** FloatWindow / FloatWindowController
+
+`floatWindowPositions` accumulates one entry per unique display configuration encountered (home, office, conference room, client screens). Entries are never pruned. More critically, there is no schema version field — if the position format changes in a future release, old entries silently match the `if let savedX = entry["x"]` check and return semantically wrong coordinates.
+
+**Fix:** Cap at e.g. 20 entries (LRU eviction by access timestamp), or add a top-level `version` key. Write a migration path in `positionPanel`'s first-show branch.
+
+**File:** `Sources/App/FloatWindow/FloatWindowController.swift` — `positionPanel`, `windowDidMove`
+**Found by:** adversarial review on 2026-04-05 (branch: feat/float-window-position-persist)
+
+---
+
 ## Completed
