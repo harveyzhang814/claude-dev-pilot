@@ -28,6 +28,24 @@ enum EventHandler {
                 parseError = e
             }
 
+            // If HookPayload decode failed, check whether it's a Cursor-format payload
+            // delivered to the wrong endpoint. Cursor (or its extensions) appear to
+            // POST agent events to /event in addition to /cursor-event. Log it with a
+            // dedicated event name and return 200 OK to avoid noisy 400 errors.
+            if parseError != nil,
+               let _ = try? JSONDecoder().decode(CursorHookPayload.self, from: data) {
+                let misdirectedLog = HookLog(
+                    receivedAt: Date(),
+                    hookEventName: "cursor_misdirected",
+                    sessionId: "",
+                    notificationType: nil,
+                    rawPayload: rawPayload,
+                    endpoint: "/event"
+                )
+                try? await db.write { db in try misdirectedLog.insert(db) }
+                return Response(status: .ok, headers: [:], body: .init())
+            }
+
             let log = HookLog(
                 receivedAt: Date(),
                 hookEventName: payload?.hookEventName ?? "PARSE_ERROR",
