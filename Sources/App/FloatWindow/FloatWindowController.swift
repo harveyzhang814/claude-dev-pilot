@@ -123,14 +123,15 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
 
         let oldState = currentState
         currentState = newState
-        displayState.mode = newMode
 
         if newState == .hidden {
+            displayState.mode = newMode
             panel.orderOut(nil)
             return
         }
 
         if newState == .expanded {
+            displayState.mode = newMode
             // Start at maxExpandedHeight so SwiftUI can render MenubarPopover at full size.
             // startObservingContentHeight() will resize down once GeometryReader reports
             // the actual content height. Using fittingSize here is unreliable because
@@ -145,13 +146,22 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         let height = targetHeight(for: newState)
-        // hover → compact: skip animation. displayState.mode is already set to .compact,
-        // so SwiftUI will switch to the compact pill during the animation — the pill
-        // centers itself in the oversized panel and appears at the wrong (lower) position
-        // until the animation completes, causing a visible double-jump. Instant resize
-        // avoids this entirely.
-        let animate = panel.isVisible && !(oldState == .hover && newState == .compact)
-        positionPanel(height: height, animated: animate)
+
+        if oldState == .hover && newState == .compact {
+            // Delay mode switch until the panel animation completes. If displayState.mode
+            // is set to .compact immediately, SwiftUI switches to the compact pill while
+            // the panel is still at hover height — the pill centers itself in the oversized
+            // panel and appears at the wrong (lower) position, causing a visible double-jump.
+            // Keeping .hover content during the animation and switching at the end gives a
+            // natural "panel collapses, then pill appears" feel.
+            positionPanel(height: height, animated: true) { [weak self] in
+                guard let self, self.currentState == .compact else { return }
+                self.displayState.mode = newMode
+            }
+        } else {
+            displayState.mode = newMode
+            positionPanel(height: height, animated: panel.isVisible)
+        }
 
         if !panel.isVisible {
             panel.orderFront(nil)
@@ -181,7 +191,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         return min(max(h, minExpandedHeight), maxExpandedHeight)
     }
 
-    private func positionPanel(height: CGFloat, animated: Bool) {
+    private func positionPanel(height: CGFloat, animated: Bool, completion: (() -> Void)? = nil) {
         let originX: CGFloat
         let topY: CGFloat
 
@@ -211,9 +221,12 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 panel.animator().setFrame(newFrame, display: true)
+            } completionHandler: {
+                completion?()
             }
         } else {
             panel.setFrame(newFrame, display: true)
+            completion?()
         }
     }
 
