@@ -35,6 +35,8 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         collapseTimer?.invalidate()
         collapseTimer = nil
         pinnedTopY = nil
+        NotificationCenter.default.removeObserver(self,
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
         panel.orderOut(nil)
     }
 
@@ -73,6 +75,10 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         setupContentView()
         startObserving()
         startObservingContentHeight()
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(handleScreenParametersChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil)
     }
 
     // MARK: - Constants
@@ -94,6 +100,10 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     /// Top edge of the panel in screen coordinates. Saved across drags so
     /// compact↔expanded transitions only change height, not position.
     private var pinnedTopY: CGFloat?
+    /// True while positionPanel is driving an animated or programmatic frame
+    /// change. windowDidMove fires on every animation frame — this flag prevents
+    /// intermediate positions from being persisted to UserDefaults.
+    private var isProgrammaticResize = false
 
     // MARK: - Setup
 
@@ -214,10 +224,15 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             originX = panel.frame.origin.x
             topY = pinned
         } else {
-            // First show: use saved position or default to top center below menubar.
-            let savedTopY = UserDefaults.standard.double(forKey: "floatWindowTopY")
-            if savedTopY > 0 {
-                originX = UserDefaults.standard.double(forKey: "floatWindowX")
+            // First show: restore saved position for this display config, or use default.
+            guard !NSScreen.screens.isEmpty else { return }
+            let key = Self.currentDisplayKey()
+            let positions = UserDefaults.standard.dictionary(forKey: "floatWindowPositions")
+                as? [String: [String: Double]] ?? [:]
+            if let entry = positions[key],
+               let savedX = entry["x"], let savedTopY = entry["topY"],
+               Self.isPositionVisible(x: savedX, topY: savedTopY, in: NSScreen.screens.map(\.frame)) {
+                originX = savedX
                 topY = savedTopY
             } else {
                 // NSScreen.screens.first is always the screen containing the menu bar (per Apple docs).
@@ -230,16 +245,19 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         let newFrame = NSRect(x: originX, y: topY - height, width: 360, height: height)
+        isProgrammaticResize = true
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 panel.animator().setFrame(newFrame, display: true)
-            } completionHandler: {
+            } completionHandler: { [weak self] in
+                self?.isProgrammaticResize = false
                 completion?()
             }
         } else {
             panel.setFrame(newFrame, display: true)
+            isProgrammaticResize = false
             completion?()
         }
     }
@@ -248,12 +266,67 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
 
     nonisolated func windowDidMove(_ notification: Notification) {
         Task { @MainActor [weak self] in
-            guard let self else { return }
-            // Update pinnedTopY to the new top edge after dragging.
+            guard let self, !self.isProgrammaticResize else { return }
+            // Update pinnedTopY to the new top edge after user drag.
             self.pinnedTopY = self.panel.frame.maxY
-            UserDefaults.standard.set(self.panel.frame.origin.x, forKey: "floatWindowX")
-            UserDefaults.standard.set(self.panel.frame.maxY, forKey: "floatWindowTopY")
+            let key = Self.currentDisplayKey()
+            guard !key.isEmpty else { return }
+            var positions = UserDefaults.standard.dictionary(forKey: "floatWindowPositions")
+                as? [String: [String: Double]] ?? [:]
+            positions[key] = ["x": self.panel.frame.origin.x, "topY": self.panel.frame.maxY]
+            UserDefaults.standard.set(positions, forKey: "floatWindowPositions")
         }
+    }
+
+    // MARK: - Screen change handling
+
+    /// Called when displays are connected, disconnected, or reconfigured.
+    /// If the panel is visible but no longer on any screen, moves it back to the
+    /// default position on the current menubar screen.
+    @objc private func handleScreenParametersChanged() {
+        guard panel.isVisible, let currentTopY = pinnedTopY else { return }
+        let screenFrames = NSScreen.screens.map(\.frame)
+        guard !screenFrames.isEmpty else { return }
+        let x = panel.frame.origin.x
+        if !Self.isPositionVisible(x: x, topY: currentTopY, in: screenFrames) {
+            // Panel is off-screen — reset and re-position on the current menubar screen.
+            pinnedTopY = nil
+            positionPanel(height: panel.frame.height, animated: true)
+        }
+    }
+
+    // MARK: - Position persistence helpers
+
+    /// Returns a key identifying the current display configuration.
+    /// Format: "vendor-model-serial" per display, sorted, joined by "|".
+    /// Uses stable hardware identifiers (CGDisplayVendorNumber, CGDisplayModelNumber,
+    /// CGDisplaySerialNumber) rather than the runtime-assigned CGDirectDisplayID.
+    /// Displays without burned-in serial numbers return 0, producing key segment "V-M-0".
+    nonisolated static func currentDisplayKey() -> String {
+        guard !NSScreen.screens.isEmpty else { return "" }
+        let displays = NSScreen.screens.compactMap { screen -> (UInt32, UInt32, UInt32)? in
+            guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                    as? CGDirectDisplayID else { return nil }
+            return (CGDisplayVendorNumber(id), CGDisplayModelNumber(id), CGDisplaySerialNumber(id))
+        }
+        return displayKey(for: displays.map { (vendor: $0.0, model: $0.1, serial: $0.2) })
+    }
+
+    /// Formats a display tuple list into a stable config key string.
+    /// Extracted as a pure function for unit testing without NSScreen dependency.
+    nonisolated static func displayKey(
+        for displays: [(vendor: UInt32, model: UInt32, serial: UInt32)]
+    ) -> String {
+        displays.map { "\($0.vendor)-\($0.model)-\($0.serial)" }.sorted().joined(separator: "|")
+    }
+
+    /// Returns true if the window's top strip (top edge at `topY`, width 360, height 36)
+    /// intersects at least one of the provided screen frames.
+    nonisolated static func isPositionVisible(
+        x: CGFloat, topY: CGFloat, in screenFrames: [NSRect]
+    ) -> Bool {
+        let rect = NSRect(x: x, y: topY - 36, width: 360, height: 36)
+        return screenFrames.contains { $0.intersects(rect) }
     }
 
     // MARK: - ViewModel observation

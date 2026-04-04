@@ -2,20 +2,6 @@
 
 ## FloatWindow
 
-### windowDidMove fires during programmatic animation
-
-**Priority:** P2
-**Component:** FloatWindow / FloatWindowController
-
-`windowDidMove` is called by AppKit on every animated frame step, not just on user drags. There is no guard distinguishing a user drag from a programmatic `panel.animator().setFrame(...)` call. As a result, every animated resize (compact→expanded, content height change) writes the intermediate frame's `maxY` to `pinnedTopY` and persists it to `UserDefaults`. On next launch or next transition, the panel can snap to a wrong Y position.
-
-**Fix:** Set an `isProgrammaticResize: Bool` flag before calling `positionPanel(height:animated:)` and clear it in a `NSAnimationContext.completionHandler`. In `windowDidMove`, skip the handler when `isProgrammaticResize == true`.
-
-**File:** `Sources/App/FloatWindow/FloatWindowController.swift` — `windowDidMove` and `positionPanel`
-**Found by:** adversarial review on 2026-04-03 (branch: fix/float-window-height-review)
-
----
-
 ### collapseTimer scheduled on .default run loop mode
 
 **Priority:** P2
