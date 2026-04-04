@@ -107,12 +107,21 @@ private struct HoverSessionRowView: View {
                 }
                 .frame(width: 8, height: 8)
 
-                // Session name
-                Text(session.project)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Session name + optional tool badge
+                HStack(spacing: 4) {
+                    Text(session.project)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if let badge = sessionToolBadge(session) {
+                        Text(badge)
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(NSColor.secondaryLabelColor))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Status text
                 Text(sessionStatusTag(session))
