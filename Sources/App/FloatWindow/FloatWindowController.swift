@@ -12,7 +12,8 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     let displayState = FloatWindowDisplayState()
 
     /// Called when the user taps the menu bar icon in Float Window mode.
-    /// Shows the window if hidden; plays a border pulse hint if already visible.
+    /// Shows the window if hidden (compact if not hover-locked, hover if hover-locked).
+    /// Plays a border pulse hint without changing state if the window is already visible.
     func reveal() {
         switch currentState {
         case .hidden:
@@ -26,10 +27,10 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     /// Resets isBorderPulsing to false before setting true so rapid re-taps restart the animation.
     private func triggerPulse() {
         pulseTask?.cancel()
-        displayState.isBorderPulsing = false
+        withAnimation(.none) { displayState.isBorderPulsing = false }
         displayState.isBorderPulsing = true
         pulseTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(0.75))
+            try? await Task.sleep(for: .seconds(0.7))
             self?.displayState.isBorderPulsing = false
         }
     }
@@ -455,9 +456,7 @@ private struct FloatWindowRootView: View {
     let onFocusSession: (DevSession) -> Void
     let onContentHeight: (CGFloat) -> Void
 
-    private var pulseColor: Color {
-        Color(red: 0.39, green: 0.70, blue: 0.95)
-    }
+    private static let pulseColor = Color(red: 0.39, green: 0.70, blue: 0.95)
 
     var body: some View {
         content
@@ -473,19 +472,23 @@ private struct FloatWindowRootView: View {
 
     @ViewBuilder
     private var pulseOverlay: some View {
-        let active = displayState.isBorderPulsing
-        if displayState.mode == .compact {
-            Capsule()
-                .strokeBorder(pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
-                .shadow(color: pulseColor.opacity(active ? 0.4 : 0),
-                        radius: active ? 8 : 0)
-                .animation(.easeOut(duration: 0.7), value: active)
+        if displayState.mode == .hidden {
+            EmptyView()
         } else {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
-                .shadow(color: pulseColor.opacity(active ? 0.4 : 0),
-                        radius: active ? 8 : 0)
-                .animation(.easeOut(duration: 0.7), value: active)
+            let active = displayState.isBorderPulsing
+            if displayState.mode == .compact {
+                Capsule()
+                    .strokeBorder(Self.pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
+                    .shadow(color: Self.pulseColor.opacity(active ? 0.4 : 0),
+                            radius: active ? 8 : 0)
+                    .animation(.easeOut(duration: 0.7), value: active)
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Self.pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
+                    .shadow(color: Self.pulseColor.opacity(active ? 0.4 : 0),
+                            radius: active ? 8 : 0)
+                    .animation(.easeOut(duration: 0.7), value: active)
+            }
         }
     }
 

@@ -61,8 +61,10 @@ struct AgentDevPilotApp: App {
 
 // MARK: - Float Window menubar tap
 
-/// In Float Window mode, tapping the menubar icon toggles the float window's
-/// expanded state. This view closes the MenuBarExtra popup immediately.
+/// In Float Window mode, tapping the menubar icon reveals the float window.
+/// If hidden, shows it in compact or hover state (depending on hoverLock).
+/// If already visible, triggers a border pulse animation to hint the user to its location.
+/// This view closes the MenuBarExtra popup immediately after triggering the reveal.
 private struct FloatWindowMenubarTap: View {
     let appState: AppState
 
