@@ -70,7 +70,7 @@ private struct FloatWindowMenubarTap: View {
         Color.clear
             .frame(width: 1, height: 1)
             .onAppear {
-                appState.toggleFloatWindowExpanded()
+                appState.revealFloatWindow()
                 // Close the MenuBarExtra popup that just opened
                 NSApplication.shared.keyWindow?.orderOut(nil)
             }

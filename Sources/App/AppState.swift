@@ -61,8 +61,9 @@ public final class AppState {
             return
         }
 
-        // Install hook script (idempotent — no-op if already up to date)
+        // Install hook scripts (idempotent — no-op if already up to date)
         try? HookInstaller.installScript()
+        try? HookInstaller.installCursorScript()
 
         // Request notification permission
         notificationsAuthorized = await NotificationService.shared.requestPermission()
@@ -203,7 +204,7 @@ public final class AppState {
         }
     }
 
-    func toggleFloatWindowExpanded() {
-        floatWindowController?.toggleExpanded()
+    func revealFloatWindow() {
+        floatWindowController?.reveal()
     }
 }
