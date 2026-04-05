@@ -11,22 +11,27 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
 
     let displayState = FloatWindowDisplayState()
 
-    func toggleExpanded() {
+    /// Called when the user taps the menu bar icon in Float Window mode.
+    /// Shows the window if hidden (compact if not hover-locked, hover if hover-locked).
+    /// Plays a border pulse hint without changing state if the window is already visible.
+    func reveal() {
         switch currentState {
         case .hidden:
-            transition(to: .expanded)
-        case .compact, .hover:
-            transition(to: .expanded)
-        case .expanded:
-            let next: FloatWindowDisplayState.Mode
-            if viewModel.activeSessions.isEmpty {
-                next = .hidden
-            } else if displayState.isHoverLocked {
-                next = .hover
-            } else {
-                next = .compact
-            }
-            transition(to: next)
+            transition(to: displayState.isHoverLocked ? .hover : .compact)
+        case .compact, .hover, .expanded:
+            triggerPulse()
+        }
+    }
+
+    /// Briefly sets isBorderPulsing to drive the border pulse animation in FloatWindowRootView.
+    /// Resets isBorderPulsing to false before setting true so rapid re-taps restart the animation.
+    private func triggerPulse() {
+        pulseTask?.cancel()
+        withAnimation(.none) { displayState.isBorderPulsing = false }
+        displayState.isBorderPulsing = true
+        pulseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(0.7))
+            self?.displayState.isBorderPulsing = false
         }
     }
 
@@ -34,6 +39,8 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         isObserving = false
         collapseTimer?.invalidate()
         collapseTimer = nil
+        pulseTask?.cancel()
+        pulseTask = nil
         pinnedTopY = nil
         NotificationCenter.default.removeObserver(self,
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
@@ -95,6 +102,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     private let onFocusSession: (DevSession) -> Void
     private var currentState: State = .hidden
     private var collapseTimer: Timer?
+    private var pulseTask: Task<Void, Never>?
     private var isObserving = true
     private var hostingView: NSHostingView<FloatWindowRootView>!
     /// Top edge of the panel in screen coordinates. Saved across drags so
@@ -448,6 +456,8 @@ private struct FloatWindowRootView: View {
     let onFocusSession: (DevSession) -> Void
     let onContentHeight: (CGFloat) -> Void
 
+    private static let pulseColor = Color(red: 0.39, green: 0.70, blue: 0.95)
+
     var body: some View {
         content
             .background(
@@ -457,6 +467,29 @@ private struct FloatWindowRootView: View {
                         .onChange(of: geo.size.height) { _, h in onContentHeight(h) }
                 }
             )
+            .overlay(pulseOverlay.allowsHitTesting(false))
+    }
+
+    @ViewBuilder
+    private var pulseOverlay: some View {
+        if displayState.mode == .hidden {
+            EmptyView()
+        } else {
+            let active = displayState.isBorderPulsing
+            if displayState.mode == .compact {
+                Capsule()
+                    .strokeBorder(Self.pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
+                    .shadow(color: Self.pulseColor.opacity(active ? 0.4 : 0),
+                            radius: active ? 8 : 0)
+                    .animation(.easeOut(duration: 0.7), value: active)
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Self.pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
+                    .shadow(color: Self.pulseColor.opacity(active ? 0.4 : 0),
+                            radius: active ? 8 : 0)
+                    .animation(.easeOut(duration: 0.7), value: active)
+            }
+        }
     }
 
     @ViewBuilder
