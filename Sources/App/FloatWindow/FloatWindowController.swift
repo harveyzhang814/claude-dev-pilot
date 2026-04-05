@@ -468,7 +468,7 @@ private struct FloatWindowRootView: View {
                         .onChange(of: geo.size.height) { _, h in onContentHeight(h) }
                 }
             )
-            .overlay(pulseOverlay)
+            .overlay(pulseOverlay.allowsHitTesting(false))
     }
 
     @ViewBuilder
