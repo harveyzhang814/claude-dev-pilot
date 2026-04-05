@@ -25,9 +25,10 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     /// Briefly sets isBorderPulsing to drive the border pulse animation in FloatWindowRootView.
     /// Resets isBorderPulsing to false before setting true so rapid re-taps restart the animation.
     private func triggerPulse() {
+        pulseTask?.cancel()
         displayState.isBorderPulsing = false
         displayState.isBorderPulsing = true
-        Task { @MainActor [weak self] in
+        pulseTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(0.75))
             self?.displayState.isBorderPulsing = false
         }
@@ -37,6 +38,8 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         isObserving = false
         collapseTimer?.invalidate()
         collapseTimer = nil
+        pulseTask?.cancel()
+        pulseTask = nil
         pinnedTopY = nil
         NotificationCenter.default.removeObserver(self,
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
@@ -98,6 +101,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     private let onFocusSession: (DevSession) -> Void
     private var currentState: State = .hidden
     private var collapseTimer: Timer?
+    private var pulseTask: Task<Void, Never>?
     private var isObserving = true
     private var hostingView: NSHostingView<FloatWindowRootView>!
     /// Top edge of the panel in screen coordinates. Saved across drags so
