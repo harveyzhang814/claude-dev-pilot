@@ -455,6 +455,10 @@ private struct FloatWindowRootView: View {
     let onFocusSession: (DevSession) -> Void
     let onContentHeight: (CGFloat) -> Void
 
+    private var pulseColor: Color {
+        Color(red: 0.39, green: 0.70, blue: 0.95)
+    }
+
     var body: some View {
         content
             .background(
@@ -464,6 +468,25 @@ private struct FloatWindowRootView: View {
                         .onChange(of: geo.size.height) { _, h in onContentHeight(h) }
                 }
             )
+            .overlay(pulseOverlay)
+    }
+
+    @ViewBuilder
+    private var pulseOverlay: some View {
+        let active = displayState.isBorderPulsing
+        if displayState.mode == .compact {
+            Capsule()
+                .strokeBorder(pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
+                .shadow(color: pulseColor.opacity(active ? 0.4 : 0),
+                        radius: active ? 8 : 0)
+                .animation(.easeOut(duration: 0.7), value: active)
+        } else {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(pulseColor.opacity(active ? 0.9 : 0), lineWidth: 2)
+                .shadow(color: pulseColor.opacity(active ? 0.4 : 0),
+                        radius: active ? 8 : 0)
+                .animation(.easeOut(duration: 0.7), value: active)
+        }
     }
 
     @ViewBuilder
