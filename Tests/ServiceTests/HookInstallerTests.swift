@@ -10,4 +10,12 @@ struct HookInstallerTests {
         #expect(prompt.contains("SessionStart"))
         #expect(prompt.contains("SessionEnd"))
     }
+
+    @Test("cursorAgentPrompt includes all three hooks")
+    func cursorAgentPromptIncludesAllThreeHooks() {
+        let prompt = HookInstaller.cursorAgentPrompt()
+        #expect(prompt.contains("sessionStart"))
+        #expect(prompt.contains("sessionEnd"))
+        #expect(prompt.contains("stop"))
+    }
 }

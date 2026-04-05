@@ -6,6 +6,8 @@ struct OnboardingView: View {
     @State private var connectionStatus: ConnectionStatus = .idle
     @State private var scriptInstalled: Bool = false
     @State private var scriptError: String? = nil
+    @State private var cursorScriptInstalled: Bool = false
+    @State private var cursorScriptError: String? = nil
     var onComplete: (() -> Void)?
 
     enum ConnectionStatus: Equatable {
@@ -138,12 +140,68 @@ struct OnboardingView: View {
                 Label("Copy Prompt", systemImage: "doc.on.doc")
             }
             .accessibilityLabel("Copy Claude Code hook install prompt")
+
+            Divider()
+
+            // Cursor integration
+            Text("Step 1c: Set Up Cursor Integration (Optional)")
+                .font(.subheadline).fontWeight(.medium)
+
+            HStack(spacing: 8) {
+                if cursorScriptInstalled {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    Text("Cursor hook script installed at ~/.agent-dev-pilot/hooks/cursor-notify.sh")
+                        .foregroundColor(.green)
+                } else if let err = cursorScriptError {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                    Text(err).foregroundColor(.red)
+                } else {
+                    Image(systemName: "circle").foregroundColor(.secondary)
+                    Text("Not yet installed").foregroundColor(.secondary)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
+
+            if !cursorScriptInstalled {
+                Button {
+                    installCursorScript()
+                } label: {
+                    Label("Install Cursor Hook Script", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Text("Paste this into Cursor Agent to register the sessionStart, sessionEnd, and stop hooks:")
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ScrollView {
+                Text(HookInstaller.cursorAgentPrompt())
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(6)
+            }
+            .frame(height: 120)
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(HookInstaller.cursorAgentPrompt(), forType: .string)
+            } label: {
+                Label("Copy Cursor Prompt", systemImage: "doc.on.doc")
+            }
+            .accessibilityLabel("Copy Cursor hook install prompt")
         }
         .onAppear { checkScriptStatus() }
     }
 
     private func checkScriptStatus() {
         scriptInstalled = HookInstaller.isScriptInstalled()
+        cursorScriptInstalled = HookInstaller.isCursorScriptInstalled()
     }
 
     private func installScript() {
@@ -153,6 +211,16 @@ struct OnboardingView: View {
             scriptError = nil
         } catch {
             scriptError = "Install failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func installCursorScript() {
+        do {
+            try HookInstaller.installCursorScript()
+            cursorScriptInstalled = true
+            cursorScriptError = nil
+        } catch {
+            cursorScriptError = "Install failed: \(error.localizedDescription)"
         }
     }
 
