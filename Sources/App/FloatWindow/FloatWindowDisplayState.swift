@@ -15,6 +15,7 @@ final class FloatWindowDisplayState {
         didSet { UserDefaults.standard.set(isHoverLocked, forKey: "floatWindowHoverLocked") }
     }
     /// Set to true by FloatWindowController when the menubar icon is tapped while
-    /// the window is already visible. Drives the border pulse animation in FloatWindowRootView.
-    var isPulsing: Bool = false
+    /// the window is already visible. Drives a one-shot border pulse animation in
+    /// FloatWindowRootView to hint the user to the window's current location.
+    var isBorderPulsing: Bool = false
 }
