@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showRecentPayloads: Bool = false
     @State private var recentPayloads: [String] = []
     @State private var promptCopied: Bool = false
+    @State private var cursorPromptCopied: Bool = false
 
     var body: some View {
         Form {
@@ -91,6 +92,38 @@ struct SettingsView: View {
                         }
                     } label: {
                         Label(promptCopied ? "Copied!" : "Copy Prompt", systemImage: promptCopied ? "checkmark" : "doc.on.doc")
+                    }
+                }
+            }
+
+            // Cursor hooks section
+            Section("Cursor Hooks") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Paste this into Cursor Agent to register the sessionStart, sessionEnd, and stop hooks:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ScrollView {
+                        Text(HookInstaller.cursorAgentPrompt())
+                            .font(.system(.caption2, design: .monospaced))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 100)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(6)
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(HookInstaller.cursorAgentPrompt(), forType: .string)
+                        cursorPromptCopied = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            cursorPromptCopied = false
+                        }
+                    } label: {
+                        Label(cursorPromptCopied ? "Copied!" : "Copy Prompt", systemImage: cursorPromptCopied ? "checkmark" : "doc.on.doc")
                     }
                 }
             }
