@@ -11,22 +11,25 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
 
     let displayState = FloatWindowDisplayState()
 
-    func toggleExpanded() {
+    /// Called when the user taps the menu bar icon in Float Window mode.
+    /// Shows the window if hidden; plays a border pulse hint if already visible.
+    func reveal() {
         switch currentState {
         case .hidden:
-            transition(to: .expanded)
-        case .compact, .hover:
-            transition(to: .expanded)
-        case .expanded:
-            let next: FloatWindowDisplayState.Mode
-            if viewModel.activeSessions.isEmpty {
-                next = .hidden
-            } else if displayState.isHoverLocked {
-                next = .hover
-            } else {
-                next = .compact
-            }
-            transition(to: next)
+            transition(to: displayState.isHoverLocked ? .hover : .compact)
+        case .compact, .hover, .expanded:
+            triggerPulse()
+        }
+    }
+
+    /// Briefly sets isBorderPulsing to drive the border pulse animation in FloatWindowRootView.
+    /// Resets isBorderPulsing to false before setting true so rapid re-taps restart the animation.
+    private func triggerPulse() {
+        displayState.isBorderPulsing = false
+        displayState.isBorderPulsing = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(0.75))
+            self?.displayState.isBorderPulsing = false
         }
     }
 
