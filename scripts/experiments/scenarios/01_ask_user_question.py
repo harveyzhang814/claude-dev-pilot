@@ -22,47 +22,30 @@ def run(log_file: str):
     session.start()
     session.mark("SCENARIO_START")
 
-    # Wait for TUI ready (the ">" prompt indicator or welcome text)
-    output = session.read_until(">", timeout=15)
-    if b">" not in output:
-        session.mark("TUI_TIMEOUT")
-        session.stop()
-        return
+    # Wait for TUI ready — drain until output settles (15s max)
+    session.drain(seconds=15)
     session.mark("TUI_READY")
 
-    # Ask Claude to invoke AskUserQuestion
+    # Ask Claude to invoke AskUserQuestion (no options — free-text reply is simpler to detect)
     prompt = (
-        b"Use the ask_user_question tool to ask me: what is your favorite color? "
-        b"Provide options: Blue, Red, Green, Purple. "
+        b"Use the ask_user_question tool to ask me exactly this question: "
+        b"'What is your favorite color?' "
         b"After I answer, tell me which color I chose.\r"
     )
     session.send(prompt)
     session.mark("PROMPT_SENT")
 
-    # Wait for the AskUserQuestion dialog to appear.
-    # The TUI renders the question text + options in a box.
-    # "favorite color" should appear in the dialog.
-    output = session.read_until("favorite color", timeout=40)
-    if b"favorite color" not in output:
-        session.mark("DIALOG_NOT_APPEARED")
-        session.stop()
-        return
-    session.mark("DIALOG_APPEARED")
-
-    # Give hooks time to fire: PreToolUse/AskUserQuestion + Notification(permission_prompt)
-    session.drain(seconds=3)
+    # Wait 50s for Claude to call AskUserQuestion and show the dialog.
+    # TUI output contains ANSI codes — avoid pattern matching, use time-based wait.
+    session.drain(seconds=50)
     session.mark("PRE_ANSWER_HOOKS_CAPTURED")
 
-    # Send the answer "Blue"
+    # Send the answer
     session.send(b"Blue\r")
     session.mark("ANSWER_SENT")
 
-    # Wait for Claude to confirm it received the answer
-    output = session.read_until("Blue", timeout=25)
-    session.mark("RESPONSE_RECEIVED" if b"Blue" in output else "RESPONSE_TIMEOUT")
-
-    # Drain to capture PostToolUse/AskUserQuestion (if it fires) or UserPromptSubmit
-    session.drain(seconds=5)
+    # Wait for Claude to process the answer and respond (30s)
+    session.drain(seconds=30)
     session.mark("POST_ANSWER_HOOKS_CAPTURED")
 
     session.stop(flush_wait=6)

@@ -130,16 +130,30 @@ class PTYSession:
         self._cleanup()
 
     def _cleanup(self):
-        """Send SIGTERM to child process. Safe to call multiple times."""
+        """Send SIGTERM then SIGKILL to child process. Safe to call multiple times."""
         if self._stopped:
             return
         self._stopped = True
         if self.pid:
             try:
                 os.kill(self.pid, signal.SIGTERM)
-                os.waitpid(self.pid, 0)
             except (OSError, ChildProcessError):
                 pass
+            # Poll with WNOHANG for up to 2s, then SIGKILL
+            for _ in range(20):
+                time.sleep(0.1)
+                try:
+                    result = os.waitpid(self.pid, os.WNOHANG)
+                    if result[0] != 0:
+                        break
+                except (OSError, ChildProcessError):
+                    break
+            else:
+                try:
+                    os.kill(self.pid, signal.SIGKILL)
+                    os.waitpid(self.pid, 0)
+                except (OSError, ChildProcessError):
+                    pass
             self.pid = None
         if self.master_fd is not None:
             try:
