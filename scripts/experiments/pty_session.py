@@ -134,6 +134,15 @@ class PTYSession:
         if self._stopped:
             return
         self._stopped = True
+        # Close master_fd FIRST — this sends EOF to the PTY slave, unblocking
+        # any read() inside claude. Without this, SIGKILL may leave the child
+        # in uninterruptible PTY wait indefinitely.
+        if self.master_fd is not None:
+            try:
+                os.close(self.master_fd)
+            except OSError:
+                pass
+            self.master_fd = None
         if self.pid:
             try:
                 os.kill(self.pid, signal.SIGTERM)
