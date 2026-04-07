@@ -14,6 +14,7 @@ Usage:
 import atexit
 import importlib.util
 import json
+import multiprocessing
 import os
 import shutil
 import sys
@@ -25,6 +26,8 @@ CAPTURE_SH = str(SCRIPTS_DIR / "capture.sh")
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 SETTINGS_BACKUP = Path.home() / ".claude" / "settings.json.bak_experiment_runner"
 RAW_DATA_DIR = SCRIPTS_DIR / "data" / "raw"
+
+SCENARIO_TIMEOUT = 300  # 5 minutes max per scenario
 
 
 # ── Settings management ───────────────────────────────────────────────────────
@@ -72,12 +75,30 @@ def _restore_settings():
 
 # ── Scenario execution ────────────────────────────────────────────────────────
 
-def run_scenario(scenario_path: str, log_file: str):
-    """Dynamically import and execute a scenario's run() function."""
+def _run_in_subprocess(scenario_path: str, log_file: str):
+    """Target function for multiprocessing — runs in a child process."""
     spec = importlib.util.spec_from_file_location("scenario", scenario_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     mod.run(log_file)
+
+
+def run_scenario(scenario_path: str, log_file: str) -> str:
+    """
+    Run a scenario in a child process with a hard timeout.
+    Returns "ok", "timeout", or "error:<msg>".
+    The child process is SIGKILL'd if it exceeds SCENARIO_TIMEOUT.
+    """
+    p = multiprocessing.Process(target=_run_in_subprocess, args=(scenario_path, log_file))
+    p.start()
+    p.join(timeout=SCENARIO_TIMEOUT)
+    if p.is_alive():
+        p.kill()
+        p.join(timeout=5)
+        return f"timeout:{SCENARIO_TIMEOUT}s"
+    if p.exitcode != 0:
+        return f"error:exit_code={p.exitcode}"
+    return "ok"
 
 
 def analyze_results(log_files: list[str]):
@@ -121,15 +142,18 @@ def main():
         start = time.time()
 
         try:
-            run_scenario(str(scenario_path), log_file)
+            status = run_scenario(str(scenario_path), log_file)
             elapsed = time.time() - start
-            results[name] = {"status": "ok", "log": log_file, "elapsed_s": round(elapsed, 1)}
-            log_files.append(log_file)
-            print(f"[{name}] OK ({elapsed:.1f}s) → {log_file}\n")
+            ok = status == "ok"
+            results[name] = {"status": status, "log": log_file, "elapsed_s": round(elapsed, 1)}
+            if ok:
+                log_files.append(log_file)
+            icon = "✓" if ok else "⚠"
+            print(f"[{name}] {icon} {status} ({elapsed:.1f}s) → {log_file}\n")
         except Exception as e:
             elapsed = time.time() - start
-            results[name] = {"status": "error", "error": str(e), "elapsed_s": round(elapsed, 1)}
-            print(f"[{name}] ERROR: {e} ({elapsed:.1f}s)\n")
+            results[name] = {"status": f"error:{e}", "elapsed_s": round(elapsed, 1)}
+            print(f"[{name}] ✗ ERROR: {e} ({elapsed:.1f}s)\n")
 
     # Summary
     print("\n=== RUNNER SUMMARY ===")
