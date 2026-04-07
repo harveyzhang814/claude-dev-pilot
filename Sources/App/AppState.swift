@@ -19,6 +19,9 @@ public final class AppState {
     // NotificationBatcher
     private var batcher: NotificationBatcher?
 
+    // HookStreamCoordinator
+    private var coordinator: HookStreamCoordinator?
+
     // State
     var serverRunning: Bool = false
     var notificationsAuthorized: Bool = false
@@ -104,14 +107,24 @@ public final class AppState {
         let port = UserDefaults.standard.integer(forKey: "serverPort")
         let resolvedPort = port > 0 ? port : 9876
         let batcher = self.batcher
-        let stopWindow = StopWindowService(db: dbPool, onIdleResolved: { sessionId in
-            let session = try? dbPool.read { db in
-                try DevSession.fetchOne(db, key: sessionId)
+        let hookCoordinator = HookStreamCoordinator(
+            db: dbPool,
+            stopWindowDuration: .seconds(2),
+            onIdleResolved: { sessionId in
+                let session = try? dbPool.read { db in
+                    try DevSession.fetchOne(db, key: sessionId)
+                }
+                let project = session?.project ?? "unknown"
+                let tool = session?.tool ?? "claude-code"
+                batcher?.submitIdle(sessionId: sessionId, project: project, tool: tool)
             }
-            let project = session?.project ?? "unknown"
-            let tool = session?.tool ?? "claude-code"
-            batcher?.submitIdle(sessionId: sessionId, project: project, tool: tool)
-        })
+        )
+        self.coordinator = hookCoordinator
+
+        // Restore in-memory state from DB for active sessions
+        if let activeSessions = try? await dbPool.read({ db in try DevSession.fetchAll(db) }) {
+            await hookCoordinator.restoreStates(from: activeSessions)
+        }
 
         serverTask = Task.detached(priority: .background) {
             do {
@@ -119,7 +132,7 @@ public final class AppState {
                     db: dbPool,
                     authToken: token,
                     port: resolvedPort,
-                    stopWindow: stopWindow,
+                    coordinator: hookCoordinator,
                     onEvent: { event in
                         guard event.attentionTier != .background else { return }
                         batcher?.submit(event)

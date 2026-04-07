@@ -11,11 +11,11 @@ public enum EventServer {
     public static func buildApp(
         db: any DatabaseWriter & Sendable,
         authToken: String,
-        stopWindow: StopWindowService,
+        coordinator: HookStreamCoordinator,
         onEvent: @Sendable @escaping (DevEvent) -> Void
     ) -> some ApplicationProtocol {
         let router = Router()
-        configureRoutes(router, db: db, authToken: authToken, stopWindow: stopWindow, onEvent: onEvent)
+        configureRoutes(router, db: db, authToken: authToken, coordinator: coordinator, onEvent: onEvent)
         return Application(router: router)
     }
 
@@ -24,11 +24,11 @@ public enum EventServer {
         db: any DatabaseWriter & Sendable,
         authToken: String,
         port: Int,
-        stopWindow: StopWindowService,
+        coordinator: HookStreamCoordinator,
         onEvent: @Sendable @escaping (DevEvent) -> Void
     ) -> some ApplicationProtocol {
         let router = Router()
-        configureRoutes(router, db: db, authToken: authToken, stopWindow: stopWindow, onEvent: onEvent)
+        configureRoutes(router, db: db, authToken: authToken, coordinator: coordinator, onEvent: onEvent)
         let config = ApplicationConfiguration(address: .hostname("127.0.0.1", port: port))
         return Application(router: router, configuration: config)
     }
@@ -41,12 +41,12 @@ public enum EventServer {
         _ router: Router<BasicRequestContext>,
         db: any DatabaseWriter & Sendable,
         authToken: String,
-        stopWindow: StopWindowService,
+        coordinator: HookStreamCoordinator,
         onEvent: @Sendable @escaping (DevEvent) -> Void
     ) {
         router.middlewares.add(AuthMiddleware(expectedToken: authToken))
         router.get("/health", use: EventHandler.getHealth())
-        router.post("/event", use: EventHandler.postEvent(db: db, stopWindow: stopWindow, onEvent: onEvent))
-        router.post("/cursor-event", use: EventHandler.postCursorEvent(db: db, stopWindow: stopWindow, onEvent: onEvent))
+        router.post("/event", use: EventHandler.postEvent(db: db, coordinator: coordinator, onEvent: onEvent))
+        router.post("/cursor-event", use: EventHandler.postCursorEvent(db: db, coordinator: coordinator, onEvent: onEvent))
     }
 }
