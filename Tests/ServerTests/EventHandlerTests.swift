@@ -15,8 +15,8 @@ struct EventHandlerTests {
 
     private func makeApp(authToken: String = "test-token") throws -> (some ApplicationProtocol, any DatabaseWriter & Sendable) {
         let db = try DatabaseManager.openInMemoryDatabase()
-        let stopWindow = StopWindowService(db: db)
-        let app = EventServer.buildApp(db: db, authToken: authToken, stopWindow: stopWindow) { _ in }
+        let coordinator = HookStreamCoordinator(db: db)
+        let app = EventServer.buildApp(db: db, authToken: authToken, coordinator: coordinator) { _ in }
         return (app, db)
     }
 

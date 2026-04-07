@@ -158,7 +158,7 @@ State transitions in `SessionLifecycleService`:
 
 Script content is embedded in `HookInstaller.scriptContent` (the canonical source of truth — not in `Resources/`). `HookInstaller.installScript()` writes it to `~/.agent-dev-pilot/hooks/notify.sh` (0755), skipping the write if content is unchanged. Fire-and-forget — uses `&` so it never blocks Claude Code. Enforces 64KB payload limit via `head -c 65536`. If the app is not running, events are silently dropped.
 
-Claude Code hooks registered: `Notification`, `SessionStart`, `SessionEnd`. The `UserPromptSubmit` hook is also handled. Use `HookInstaller.claudeCodePrompt()` to generate the settings.json merge prompt.
+Claude Code hooks registered: `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `Notification`. Use `HookInstaller.claudeCodePrompt()` to generate the settings.json merge prompt.
 
 ### cursor-notify.sh
 

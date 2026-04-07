@@ -1,0 +1,6 @@
+{"_marker": "SCENARIO_START", "_ts": 1775545553.334752, "_scenario": "05_task_interrupt"}
+{"_marker": "TUI_READY", "_ts": 1775545553.560334, "_scenario": "05_task_interrupt"}
+{"_marker": "PROMPT_SENT", "_ts": 1775545553.5605829, "_scenario": "05_task_interrupt"}
+{"_marker": "TASK_IN_PROGRESS", "_ts": 1775545580.765973, "_scenario": "05_task_interrupt"}
+{"_marker": "INTERRUPT_SENT", "_ts": 1775545580.766691, "_scenario": "05_task_interrupt"}
+{"_marker": "SCENARIO_COMPLETE", "_ts": 1775545586.8674948, "_scenario": "05_task_interrupt"}

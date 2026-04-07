@@ -13,10 +13,10 @@ struct CursorEventHandlerTests {
 
     // MARK: - Helpers
 
-    private func makeApp(authToken: String = "test-token") throws -> (some ApplicationProtocol, any DatabaseWriter & Sendable) {
+    private func makeApp(authToken: String = "test-token", stopWindowMs: Int = 2000) throws -> (some ApplicationProtocol, any DatabaseWriter & Sendable) {
         let db = try DatabaseManager.openInMemoryDatabase()
-        let stopWindow = StopWindowService(db: db)
-        let app = EventServer.buildApp(db: db, authToken: authToken, stopWindow: stopWindow) { _ in }
+        let coordinator = HookStreamCoordinator(db: db, stopWindowDuration: .milliseconds(stopWindowMs))
+        let app = EventServer.buildApp(db: db, authToken: authToken, coordinator: coordinator) { _ in }
         return (app, db)
     }
 
@@ -121,7 +121,8 @@ struct CursorEventHandlerTests {
 
     @Test("POST /cursor-event stop → session transitions to idle via stop window")
     func postCursorStopEvent() async throws {
-        let (app, db) = try makeApp()
+        // Use a short stop window so the test doesn't take 2s
+        let (app, db) = try makeApp(stopWindowMs: 100)
         let sessionId = "cursor-stop-test"
 
         try await app.test(.router) { client in
@@ -144,6 +145,9 @@ struct CursorEventHandlerTests {
             )
             #expect(response.status == .ok)
         }
+
+        // Wait for the stop window to expire and write the agentStopped event
+        try await Task.sleep(for: .milliseconds(300))
 
         // Verify a stop event was persisted
         let events = try await db.read { try DevEvent.fetchAll($0) }

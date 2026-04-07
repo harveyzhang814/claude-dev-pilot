@@ -1,0 +1,5 @@
+{"_marker": "SCENARIO_START", "_ts": 1775545504.798259, "_scenario": "03_simple_task"}
+{"_marker": "TUI_READY", "_ts": 1775545505.027818, "_scenario": "03_simple_task"}
+{"_marker": "PROMPT_SENT", "_ts": 1775545505.028069, "_scenario": "03_simple_task"}
+{"_marker": "RESPONSE_RECEIVED", "_ts": 1775545530.047572, "_scenario": "03_simple_task"}
+{"_marker": "SCENARIO_COMPLETE", "_ts": 1775545535.124982, "_scenario": "03_simple_task"}

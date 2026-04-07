@@ -1,0 +1,6 @@
+{"_marker": "SCENARIO_START", "_ts": 1775545592.978587, "_scenario": "06_session_end"}
+{"_marker": "TUI_READY", "_ts": 1775545593.190413, "_scenario": "06_session_end"}
+{"_marker": "PROMPT_SENT", "_ts": 1775545593.190623, "_scenario": "06_session_end"}
+{"_marker": "RESPONSE_RECEIVED", "_ts": 1775545613.301533, "_scenario": "06_session_end"}
+{"_marker": "EXIT_SENT", "_ts": 1775545616.3500512, "_scenario": "06_session_end"}
+{"_marker": "SCENARIO_COMPLETE", "_ts": 1775545624.3558242, "_scenario": "06_session_end"}
