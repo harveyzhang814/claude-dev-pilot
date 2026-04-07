@@ -16,6 +16,7 @@ public struct HookPayload: Codable, Sendable {
     public let tty: String?           // e.g. "/dev/ttys003", injected by notify.sh
     public let terminalApp: String?   // e.g. "ghostty", "Apple_Terminal"
     public let tool: String?          // nil = "claude-code" (default); "cursor" injected by CursorNormalizer
+    public let toolName: String?          // PreToolUse/PostToolUse: e.g. "AskUserQuestion", "Bash"
 
     public enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -31,6 +32,7 @@ public struct HookPayload: Codable, Sendable {
         case tty
         case terminalApp = "terminal_app"
         case tool
+        case toolName = "tool_name"
     }
 
     public init(from decoder: Decoder) throws {
@@ -48,6 +50,7 @@ public struct HookPayload: Codable, Sendable {
         tty = try c.decodeIfPresent(String.self, forKey: .tty)
         terminalApp = try c.decodeIfPresent(String.self, forKey: .terminalApp)
         tool = try c.decodeIfPresent(String.self, forKey: .tool)
+        toolName = try c.decodeIfPresent(String.self, forKey: .toolName)
     }
 
     public init(
@@ -63,7 +66,8 @@ public struct HookPayload: Codable, Sendable {
         model: String? = nil,
         tty: String? = nil,
         terminalApp: String? = nil,
-        tool: String? = nil
+        tool: String? = nil,
+        toolName: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -78,5 +82,6 @@ public struct HookPayload: Codable, Sendable {
         self.tty = tty
         self.terminalApp = terminalApp
         self.tool = tool
+        self.toolName = toolName
     }
 }
