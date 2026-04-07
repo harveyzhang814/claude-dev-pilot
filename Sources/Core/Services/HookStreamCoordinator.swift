@@ -119,7 +119,7 @@ public actor HookStreamCoordinator {
                             tty: nil,
                             terminalApp: nil,
                             tool: fallbackTool,
-                            status: status,
+                            status: .idle,
                             startedAt: Date(),
                             endedAt: nil,
                             totalTokens: nil,
