@@ -294,114 +294,201 @@ PostToolUse/Bash          tool_response.stdout = "..."
 ## 多场景实验结果 (2026-04-07)
 
 实验系统：`scripts/experiments/` — 6 个 PTY 场景，采集完整 hook 事件流。
-数据来源：`/tmp/hook_capture.jsonl` + 各场景 `data/raw/*.jsonl`，通过 session_id 时间关联。
+数据来源：`/tmp/hook_capture.jsonl`，按 session_id 隔离，时间戳对齐至实验运行窗口（UTC 07:02–07:07）。
+实验版本：commit `1f02f09`，分支 `feat/hook-stream-experiment`。
 
 ---
 
-### 场景 01：AskUserQuestion（关键未知项）
+### 各场景精确事件流（UTC 时间轴）
 
-**session**: `94d71b5c`
-**完整 hook 序列：**
+#### 场景 01：AskUserQuestion — session `94d71b5c`
 
 ```
-SessionStart
-UserPromptSubmit              (用户发送「请调用 AskUserQuestion」prompt)
-PreToolUse  tool=ToolSearch   (Claude 确认工具可用)
-PostToolUse tool=ToolSearch
-PreToolUse  tool=AskUserQuestion   ← Claude 调用工具
-Notification nt=permission_prompt  ← 对话框出现（6s 后）
-SessionEnd                         ← 会话被终止（工具悬挂状态）
+07:02:21  SessionStart
+07:02:34  UserPromptSubmit           ← 用户发送「请调用 AskUserQuestion」prompt
+07:02:45  PreToolUse   tool=ToolSearch
+07:02:45  PostToolUse  tool=ToolSearch
+07:02:54  PreToolUse   tool=AskUserQuestion   ← busy→waiting 触发（T+0）
+07:03:00  Notification nt=permission_prompt   ← 对话框出现（T+6s）
+           msg="Claude Code needs your attention"
+07:04:00  SessionEnd                          ← PTY cleanup 触发（工具悬挂中）
 ```
 
-**关键结论：**
-
-- `PostToolUse/AskUserQuestion` **从未触发**。
-  原因：AskUserQuestion 工具处于「等待用户输入」挂起状态，工具生命周期未完成。
-  当 session 被 kill 时，触发的是 `SessionEnd` 而非 `PostToolUse`。
-  
-- 正确完成路径推断：用户在 TUI 中用方向键选择选项 + Enter 后，
-  `PostToolUse/AskUserQuestion` **应当**触发（tool 完成），随后 Claude 继续执行。
-  本次实验未能验证此路径（因为发送了文本 "Blue\r" 而非方向键）。
-
-- **`waiting → busy` 转换信号**（推断）：`PostToolUse/AskUserQuestion`。
-  若无法可靠捕获，备用方案：`UserPromptSubmit`（用户重新输入）。
-
-- **`idle/busy → waiting` 信号**：`PreToolUse/AskUserQuestion` 或 `Notification(permission_prompt)`。
+**关键发现：**
+- `PreToolUse/AskUserQuestion` → `Notification(permission_prompt)` 间隔 **精确 6 秒**（TUI 渲染延迟）
+- AskUserQuestion 悬挂期间收到 `SessionEnd`（PTY kill），`PostToolUse` **从未触发**
+- 这证明 AskUserQuestion 工具在用户未回答时保持阻塞，工具生命周期不完结，`PostToolUse` 不会在中间触发
 
 ---
 
-### 场景 02：permission_needed (acceptEdits 模式)
-
-**session**: `bdbb7db1`
-**hook 序列：**
+#### 场景 02：permission_needed — session `bdbb7db1`
 
 ```
-SessionStart
-UserPromptSubmit  pm=acceptEdits
-Stop              stop_hook_active=False
+07:04:02  SessionStart
+07:04:33  UserPromptSubmit  pm=acceptEdits
+07:04:44  Stop              stop_hook_active=False
 ```
 
 **发现：**
-- `--permission-mode acceptEdits` 可能不是有效 CLI 标志，Claude 未执行 Bash 工具调用。
-- `stop_hook_active=False`：正常停止（非中断）。
-- **待验证**：正确的 permission 拒绝/批准场景的 hook 序列。
+- `--permission-mode acceptEdits` 不是有效 CLI 标志，claude 退化为默认模式
+- Claude 直接给出文本回答（未调用 Bash），随即 Stop
+- `stop_hook_active=False` = 正常完成（非被 stop hook 打断）
+- 未捕获 Bash permission 场景，该场景需要单独实验（参见下方「ed38dc18」真实数据）
 
 ---
 
-### 场景 04：headless 模式 (`claude -p`)
-
-**session**: `61e30386`
-**hook 序列：**
+#### 场景 04：headless 模式 (`claude -p`) — session `61e30386`
 
 ```
-SessionStart
-UserPromptSubmit  pm=default
-Stop              stop_hook_active=False   ← 同秒
-SessionEnd                                 ← 同秒
+07:05:41  SessionStart
+07:05:42  UserPromptSubmit  pm=default
+07:05:46  Stop              stop_hook_active=False
+07:05:46  SessionEnd
 ```
 
 **发现：**
-- headless 模式下，`Stop` 和 `SessionEnd` **同秒触发**，顺序为 Stop 先于 SessionEnd。
-- `stop_hook_active=False`：正常完成。
-- headless 模式无需工具调用时，完整生命周期仅有 4 个 hook 事件。
+- `Stop` 和 `SessionEnd` **同秒触发**（异步写入，顺序为 Stop 先、SessionEnd 后）
+- 完整生命周期仅 4 个 hook 事件，耗时约 5 秒
+- headless 模式无 `Notification`（无 TUI，无权限对话框）
+- **StopWindowService 含义**：headless Stop 后 2s 内紧跟 SessionEnd，不会误判为 waiting
 
 ---
 
-### 场景 03/05/06：数据缺失
+#### 场景 03/05/06：数据缺失 — sessions `c08167ec`, `9c2fc6fe`, `d095c0ed`
 
-场景 03 (simple_task)、05 (interrupt)、06 (session_end) 仅捕获到 `SessionStart`，
-未见 `Stop`/`SessionEnd`/`Notification` 事件。
+```
+07:05:06  SessionStart  (c08167ec — simple_task)
+07:05:54  SessionStart  (9c2fc6fe — task_interrupt)
+07:06:34  SessionStart  (d095c0ed — session_end)
+```
 
-**可能原因：**
-- `_cleanup()` 关闭 PTY master_fd 后，claude 进程被 SIGTERM/SIGKILL 终止太快，
-  hook 脚本（fire-and-forget `&`）在系统级别被一同杀死。
-- 需要在 `stop()` 调用后增加更长的 flush_wait，或避免 SIGKILL 路径。
+三个场景均仅捕获 `SessionStart`，无后续事件。
+
+**已确认原因：**
+PTY cleanup 在 `session.stop(flush_wait=6)` 内关闭 master_fd 后立即发送 SIGTERM，
+claude 进程被终止时 hook 脚本（fire-and-forget `&`）随进程组一同被 kill。
+6 秒 flush_wait 不足以等待 claude 自然完成任务再优雅退出；
+正确做法是先让 claude 完成任务（等 Stop hook 触发），再 cleanup。
 
 ---
 
-### 综合状态检测算法（基于实验数据）
+### 补充真实数据：interactive 模式 Bash 权限审批 — session `ed38dc18`
+
+来自 `/tmp/hook_capture.jsonl` 同一天的真实 Claude Code 会话（非实验控制会话，但数据完整）。
 
 ```
-SessionStart                   → idle
-UserPromptSubmit               → busy  (同时 dismiss 所有旧事件)
-PreToolUse                     → busy  (任意工具)
-PreToolUse/AskUserQuestion     → waiting
-Notification(permission_prompt)→ waiting  (与 PreToolUse/AQU 共同确认)
-PostToolUse/AskUserQuestion    → busy   (unconfirmed — 需再次实验验证)
-Stop [recent permission_prompt]→ waiting
-Stop [无 permission_prompt]    → idle   (经 StopWindowService 2s 确认)
-Notification(idle_prompt)      → idle
-SessionEnd                     → completed
+07:03:41  UserPromptSubmit
+07:03:46  PreToolUse  tool=Bash
+07:03:52  Notification  nt=permission_prompt
+           msg="Claude needs your permission to use Bash"
+07:03:55  PostToolUse  tool=Bash           ← 用户批准后，工具执行完成
+07:03:58  PreToolUse  tool=Bash            ← 下一个工具继续
+...
+07:11:06  Stop         stop_hook_active=False
+07:12:06  Notification  nt=idle_prompt     ← Stop 后 60 秒触发
+           msg="Claude is waiting for your input"
+07:12:36  UserPromptSubmit                 ← 用户 90 秒后回复
 ```
 
-**最高置信度特征（已验证）：**
-1. `UserPromptSubmit` → **busy**（最可靠，无歧义）
-2. `PreToolUse` (任意工具) → **busy**
-3. `Notification(idle_prompt)` → **idle**
-4. `Notification(permission_prompt)` → **waiting**
-5. `SessionEnd` → **completed**
+**关键发现：`idle_prompt` 在 Stop 后 60 秒才触发**
 
-**待验证：**
-- `PostToolUse/AskUserQuestion` 在用户正确回答后是否触发
-- `Stop` + `Notification(idle_prompt)` 的共现顺序（哪个先）
-- 中断场景（ESC）的 hook 序列
+这是本次分析中最重要的新发现：
+
+- `Stop` 触发时，`StopWindowService` 已在 2 秒内决策 → session 进入 `idle`
+- `Notification(idle_prompt)` 是 Claude Code 内置的「用户无响应提醒」，**延迟约 60 秒**才发出
+- 因此 `idle_prompt` 对 `busy→idle` 状态检测**完全冗余**：状态早已在 Stop 时决策完毕
+- 当前 `EventMapper` 将 `idle_prompt` 映射为 `agentStopped/background`，处理正确，但信号到达时已无意义
+
+---
+
+### 综合状态检测算法（最终版）
+
+```
+SessionStart                      → idle
+                                    (若已 completed/stale → 重置为 idle)
+
+UserPromptSubmit                  → busy
+                                    (dismiss 所有未读通知，清除 waiting 状态)
+
+PreToolUse (任意工具)             → busy（隐含，Claude 正在执行工具链）
+
+PreToolUse/AskUserQuestion        → waiting（最早信号，T+0）
+Notification(permission_prompt)   → waiting 确认（T+6s，AskUserQuestion 场景）
+  msg contains "needs your attention"
+
+Notification(permission_prompt)   → waiting（权限审批场景）
+  msg contains "permission to use"
+
+PostToolUse (任意工具)            → busy（工具完成，Claude 继续执行）
+[PostToolUse/AskUserQuestion]     → busy（未验证，推断：用户正确回答后触发）
+
+Stop                              → 进入 StopWindowService 2s 窗口
+  2s 内有 Notification(permission_prompt / elicitation_dialog / idle_prompt)
+    → waiting
+  2s 内无 Notification
+    → idle，生成 agentStopped 合成事件
+
+Notification(idle_prompt)         → 忽略（Stop 已在 60s 前决策 idle）
+
+SessionEnd                        → completed（stamps ended_at）
+```
+
+---
+
+### 特征置信度矩阵
+
+| 特征 | 状态转换 | 置信度 | 来源 |
+|------|---------|--------|------|
+| `UserPromptSubmit` | → busy | ★★★ 确定 | 所有场景均出现 |
+| `PreToolUse` (任意) | → busy | ★★★ 确定 | 场景 01 + ed38dc18 实测 |
+| `Notification(permission_prompt)` "needs your attention" | → waiting | ★★★ 确定 | 场景 01 实测 |
+| `Notification(permission_prompt)` "permission to use" | → waiting | ★★★ 确定 | ed38dc18 实测 |
+| `PreToolUse/AskUserQuestion` | → waiting | ★★★ 确定 | 场景 01 实测（比 Notification 早 6s）|
+| `Stop` 无后续 Notification | → idle | ★★★ 确定 | 场景 02/04 + ed38dc18 实测 |
+| `SessionEnd` | → completed | ★★★ 确定 | 场景 01/04 实测 |
+| `Stop` + `SessionEnd` 同秒 | headless 完成 | ★★★ 确定 | 场景 04 实测 |
+| `PostToolUse/AskUserQuestion` | → busy | ★☆☆ 推断 | 未实验验证 |
+| `Notification(idle_prompt)` | idle 60s 提醒 | ★★★ 确定 | ed38dc18 实测（与 Stop 间隔 60s）|
+| `stop_hook_active=False` | 正常停止 | ★★★ 确定 | 场景 02/04 实测 |
+
+---
+
+### 对当前实现的影响评估
+
+#### 现有实现正确的部分
+
+| 逻辑 | 评估 |
+|------|------|
+| `StopWindowService` 2s 合并窗口 | ✅ 正确：Stop 后 2s 内无 Notification → idle |
+| `UserPromptSubmit` → busy + dismiss | ✅ 正确：最可靠的 busy 信号 |
+| `permissionNeeded` event → waiting | ✅ 正确：Notification(permission_prompt) 可靠 |
+| `SessionEnd` → completed | ✅ 正确：无歧义 |
+| `idle_prompt` → agentStopped/background | ✅ 正确：信号冗余，忽略即可 |
+| headless Stop + SessionEnd 同秒 | ✅ 正确：StopWindowService 不会误判（SessionEnd 在 2s 内）|
+
+#### 可改进的部分（未修复，记录于 TODOS.md）
+
+| 信号 | 当前处理 | 可改进方向 |
+|------|---------|-----------|
+| `PreToolUse/AskUserQuestion` | 作为 `agentStopped/background` 丢弃 | 可提早 6s 检测 waiting（在 Notification 前）|
+| `Notification.message` 内容 | 统一为 `permissionNeeded` | 可区分 AskUserQuestion vs 权限审批，显示不同 UI |
+| `PostToolUse/AskUserQuestion` | 作为 `agentStopped/background` 丢弃 | 若验证可触发，可作为 waiting→busy 信号 |
+
+---
+
+### 待验证项
+
+1. **`PostToolUse/AskUserQuestion` 是否在用户正确回答后触发**
+   实验约束：发送了文本 `"Blue\r"` 而非方向键 + Enter，工具悬挂，未能触发。
+   验证方式：用 `xdotool key Down Return` 或 AppleScript 模拟方向键选择。
+
+2. **中断场景（ESC/Ctrl-C）的 hook 序列**
+   预期：`Stop(stop_hook_active=True)` 或 `Stop(stop_hook_active=False)` 之一，可能无 SessionEnd。
+   实验约束：场景 05 PTY cleanup 过早，未捕获数据。
+
+3. **`elicitation_dialog` notification_type 的触发条件**
+   仅在 `StopWindowService` 代码中出现，实验未捕获到真实样本。
+
+4. **Bash 权限拒绝的 hook 序列**（用户点击 "Deny"）
+   预期：`Notification(permission_prompt)` → 用户拒绝 → `Stop`（无 PostToolUse）。
+   场景 02 因标志无效未捕获。
