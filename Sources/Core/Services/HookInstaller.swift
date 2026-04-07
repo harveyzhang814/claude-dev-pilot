@@ -142,23 +142,19 @@ public enum HookInstaller {
 
     /// Returns a prompt the user can paste into Claude Code.
     /// Claude Code will use its own update-config skill + permission system
-    /// to safely add the Notification, SessionStart, and SessionEnd hooks
-    /// to ~/.claude/settings.json.
+    /// to safely add all required hooks to ~/.claude/settings.json.
+    ///
+    /// Hooks registered: SessionStart, SessionEnd, UserPromptSubmit,
+    /// PreToolUse, PostToolUse, Stop, Notification
     public static func claudeCodePrompt() -> String {
         """
-        Please add Notification, SessionStart, and SessionEnd hooks to my Claude Code \
+        Please add the following hooks to my Claude Code \
         settings (~/.claude/settings.json) for Agent Dev Pilot.
 
-        All three hooks should run `~/.agent-dev-pilot/hooks/notify.sh`.
+        All hooks should run `~/.agent-dev-pilot/hooks/notify.sh`.
 
         Target JSON to merge under the "hooks" key:
         {
-          "Notification": [
-            {
-              "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
-            }
-          ],
           "SessionStart": [
             {
               "matcher": "",
@@ -166,6 +162,36 @@ public enum HookInstaller {
             }
           ],
           "SessionEnd": [
+            {
+              "matcher": "",
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "matcher": "",
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "",
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "matcher": "",
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+            }
+          ],
+          "Stop": [
+            {
+              "matcher": "",
+              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+            }
+          ],
+          "Notification": [
             {
               "matcher": "",
               "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
