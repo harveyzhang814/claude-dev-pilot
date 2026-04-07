@@ -420,7 +420,7 @@ Notification(permission_prompt)   → waiting（权限审批场景）
   msg contains "permission to use"
 
 PostToolUse (任意工具)            → busy（工具完成，Claude 继续执行）
-[PostToolUse/AskUserQuestion]     → busy（未验证，推断：用户正确回答后触发）
+PostToolUse/AskUserQuestion       → busy（用户正确回答后触发，已验证）
 
 Stop                              → 进入 StopWindowService 2s 窗口
   2s 内有 Notification(permission_prompt / elicitation_dialog / idle_prompt)
@@ -447,7 +447,7 @@ SessionEnd                        → completed（stamps ended_at）
 | `Stop` 无后续 Notification | → idle | ★★★ 确定 | 场景 02/04 + ed38dc18 实测 |
 | `SessionEnd` | → completed | ★★★ 确定 | 场景 01/04 实测 |
 | `Stop` + `SessionEnd` 同秒 | headless 完成 | ★★★ 确定 | 场景 04 实测 |
-| `PostToolUse/AskUserQuestion` | → busy | ★☆☆ 推断 | 未实验验证 |
+| `PostToolUse/AskUserQuestion` | → busy | ★★★ 确定 | 场景07实测：PreToolUse→Notification(+6s)→PostToolUse(+27s后用户回答) |
 | `Notification(idle_prompt)` | idle 60s 提醒 | ★★★ 确定 | ed38dc18 实测（与 Stop 间隔 60s）|
 | `stop_hook_active=False` | 正常停止 | ★★★ 确定 | 场景 02/04 实测 |
 
@@ -476,19 +476,35 @@ SessionEnd                        → completed（stamps ended_at）
 
 ---
 
+### 已验证项完成情况
+
+| 验证项 | 状态 | 结论 |
+|--------|------|------|
+| `PostToolUse/AskUserQuestion` 触发 | ✅ 已验证 | 用户回答后约 27s 触发（含 LLM 处理延迟）|
+| headless Stop + SessionEnd 同秒 | ✅ 已验证 | Stop 先、SessionEnd 后，同秒写入 |
+| `idle_prompt` 延迟 | ✅ 已验证 | Stop 后约 60s，对状态检测无意义 |
+| `PreToolUse/AskUserQuestion` 时序 | ✅ 已验证 | T+0 触发，比 Notification 早 6s |
+
+---
+
 ### 待验证项
 
-1. **`PostToolUse/AskUserQuestion` 是否在用户正确回答后触发**
-   实验约束：发送了文本 `"Blue\r"` 而非方向键 + Enter，工具悬挂，未能触发。
-   验证方式：用 `xdotool key Down Return` 或 AppleScript 模拟方向键选择。
+1. **中断场景（ESC 键）Stop 是否触发**
 
-2. **中断场景（ESC/Ctrl-C）的 hook 序列**
-   预期：`Stop(stop_hook_active=True)` 或 `Stop(stop_hook_active=False)` 之一，可能无 SessionEnd。
-   实验约束：场景 05 PTY cleanup 过早，未捕获数据。
+   **实验结果（场景08）：** Claude 卡在 Glob/Bash 权限对话框（两次 `Notification(permission_prompt) "permission to use"`），ESC 可能只是 dismiss 了对话框而非停止任务。会话最终由 `/exit\r` 触发 `SessionEnd`，**无 Stop 触发**。
 
-3. **`elicitation_dialog` notification_type 的触发条件**
-   仅在 `StopWindowService` 代码中出现，实验未捕获到真实样本。
+   **结论**：ESC 在权限对话框状态下不触发 Stop。正确测试需要 `--dangerously-skip-permissions` 绕过权限审批，让 Claude 自由执行工具调用，再发 ESC 中断。
 
-4. **Bash 权限拒绝的 hook 序列**（用户点击 "Deny"）
-   预期：`Notification(permission_prompt)` → 用户拒绝 → `Stop`（无 PostToolUse）。
-   场景 02 因标志无效未捕获。
+   **实际影响**：若 Claude 在权限对话框等待用户审批时被 ESC dismiss，app 会看到 `waiting` 状态（由前面的 permission_prompt 设置），而后 SessionEnd。当前 `SessionLifecycleService` 在 `SessionEnd` 时设 `completed`，行为正确。
+
+2. **`stop_hook_active=True` 场景**
+
+   所有实测场景均为 `stop_hook_active=False`（正常完成）。`True` 只在 stop hook 本身正在运行时才会出现，属于极少见的竞态，实际可忽略。
+
+3. **`elicitation_dialog` notification_type**
+
+   仅在 `StopWindowService` 代码中出现，所有实测样本均为 `permission_prompt`。推测与某些 interactive 提示有关，待真实触发条件确认。
+
+4. **Bash 权限拒绝（用户点击 Deny）**
+
+   预期：`Notification(permission_prompt)` → 用户拒绝 → `Stop`（无 PostToolUse/Bash）。未实测。
