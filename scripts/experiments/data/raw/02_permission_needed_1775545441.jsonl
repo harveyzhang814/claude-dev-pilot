@@ -1,0 +1,7 @@
+{"_marker": "SCENARIO_START", "_ts": 1775545441.148643, "_scenario": "02_permission_needed"}
+{"_marker": "TUI_READY", "_ts": 1775545441.371711, "_scenario": "02_permission_needed"}
+{"_marker": "PROMPT_SENT", "_ts": 1775545441.37201, "_scenario": "02_permission_needed"}
+{"_marker": "PERMISSION_TIMEOUT", "_ts": 1775545471.455609, "_scenario": "02_permission_needed"}
+{"_marker": "PERMISSION_APPROVED", "_ts": 1775545473.530595, "_scenario": "02_permission_needed"}
+{"_marker": "BASH_OUTPUT_RECEIVED", "_ts": 1775545493.602017, "_scenario": "02_permission_needed"}
+{"_marker": "SCENARIO_COMPLETE", "_ts": 1775545498.6860428, "_scenario": "02_permission_needed"}
