@@ -287,11 +287,14 @@ Bash 工具的 `tool_response` 结构：
 
 ## Hook 触发时序保证
 
-由于 notify.sh 使用 `&` fire-and-forget 异步发送，**写入 JSONL 文件的顺序不保证与事件实际发生顺序一致**。以下规律在实验中观察到：
+由于 notify.sh 使用 `&` fire-and-forget 异步发送，**到达服务器的顺序不保证与事件实际发生顺序一致**。以下规律在实验中观察到：
 
 - PreToolUse 和 PostToolUse 属于同一 `tool_use_id` 的调用对
-- Notification(permission_prompt) 与 PreToolUse 的顺序在文件中可能颠倒，实际业务顺序是 Notification 先触发
-- Stop 通常在最后，但 PostToolUse 有时晚于 Stop 写入文件
+- `Notification(permission_prompt)` 有时晚于 `PostToolUse` 到达（尤其是用户快速批准时）
+- `Stop` 通常在最后，但 `PostToolUse` 有时晚于 `Stop` 写入
+- 极端情况：`Notification(permission_prompt)` 在 `PostToolUse + Stop` 之后才到达
+
+**App 的处理策略**：状态机 Rule 5 将 stop window 期间到达的 permission notification 视为 no-op（已处理的旧通知），让 stop window 正常到期 → idle，避免 session 卡在 waiting。详见 [session-state-from-hooks.md](./session-state-from-hooks.md)。
 
 ---
 
