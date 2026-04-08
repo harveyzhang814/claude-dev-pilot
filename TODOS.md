@@ -47,17 +47,10 @@ The two handlers share ~60 lines of near-identical logic (body collection, parse
 
 ---
 
-### StopWindowService: timer may fire after SessionEnd (race condition)
+### ~~StopWindowService: timer may fire after SessionEnd (race condition)~~
 
-**Priority:** P2
-**Component:** Core/Services/StopWindowService
-
-If Cursor sends `stop` and then `sessionEnd` within the 2-second window, `StopWindowService.flush()` fires after `SessionEnd` has already marked the session `.completed`. The current UPDATE guard (`NOT IN ('completed', 'stale')`) prevents the state from being overwritten, and `db.changesCount == 0` prevents the phantom event card — but the `onIdleResolved` callback (which fires the macOS push notification) still runs unconditionally after the flush. This means Cursor users may see a spurious "Cursor is ready" macOS notification even though the session has ended.
-
-**Fix:** Add a `cancelWindow(for sessionId: String)` method to `StopWindowService` that cancels and removes the window entry. Call it from `SessionLifecycleService` when processing `SessionEnd` so a pending timer is cancelled before it fires.
-
-**File:** `Sources/Core/Services/StopWindowService.swift`, `Sources/Core/Services/SessionLifecycleService.swift`
-**Found by:** adversarial review on 2026-04-03 (branch: feat/cursor-integration)
+**Superseded by:** feat/hook-stream-experiment (2026-04-07)
+`StopWindowService` and `SessionLifecycleService` were removed entirely and replaced by `HookStreamCoordinator` + `SessionStateReducer`. The new pipeline handles stop window cancellation via `.cancelStopWindow` actions dispatched by the reducer on `SessionEnd`. Verify the equivalent race is covered by `HookStreamCoordinatorTests` if needed.
 
 ---
 
