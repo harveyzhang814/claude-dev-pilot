@@ -50,18 +50,37 @@ struct HookStreamCoordinatorTests {
         #expect(events.contains { $0.type == .agentStopped && $0.attentionTier == .review })
     }
 
-    // MARK: - Stop window: Notification arrives → waiting
+    // MARK: - Stop window: delayed Notification during window → no-op, session resolves to idle
 
-    @Test func stopFollowedByNotificationResolvesToWaiting() async throws {
+    /// A Notification(permissionPrompt) arriving during the stop window is a delayed/stale
+    /// delivery from an already-approved permission. It must NOT cancel the stop window or
+    /// set status to waiting (the bug). The window should expire normally → idle.
+    @Test func delayedNotificationDuringStopWindowResolvesToIdle() async throws {
         let db = try makeDB()
         let coord = makeCoordinator(db: db)
 
         await coord.process(payload("SessionStart"))
         await coord.process(payload("UserPromptSubmit"))
         await coord.process(payload("Stop"))
+        // Delayed notification arrives during the 100ms stop window — must be ignored
         await coord.process(payload("Notification", notificationType: "permission_prompt"))
 
         try await Task.sleep(for: .milliseconds(200))
+
+        let session = try await db.read { try DevSession.fetchOne($0, key: "s1") }
+        #expect(session?.status == .idle)  // window expired normally; NOT stuck at waiting
+    }
+
+    // MARK: - Stop window: genuine permission during ACTIVE task → Notification before Stop
+
+    @Test func notificationBeforeStopSetsWaiting() async throws {
+        let db = try makeDB()
+        let coord = makeCoordinator(db: db)
+
+        await coord.process(payload("SessionStart"))
+        await coord.process(payload("UserPromptSubmit"))
+        // Notification arrives while still busy (no Stop yet) → genuine permission request
+        await coord.process(payload("Notification", notificationType: "permission_prompt"))
 
         let session = try await db.read { try DevSession.fetchOne($0, key: "s1") }
         #expect(session?.status == .waiting)

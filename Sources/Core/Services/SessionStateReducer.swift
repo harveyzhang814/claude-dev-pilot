@@ -58,20 +58,19 @@ public enum SessionStateReducer {
                                 cwd: s.cwd, attentionTier: .action)
             ])
 
-        // Rule 5: Notification(permissionPrompt) during stop window → cancel window + waiting
+        // Rule 5: Notification(permissionPrompt) during stop window → no-op.
+        // Stop only fires when the agent loop exits, which cannot happen while a
+        // permission dialog is genuinely open. A notification arriving during the
+        // stop window is a stale/delayed delivery from an already-approved permission.
+        // Cancelling the window here and going to waiting leaves the session stuck
+        // because no PostToolUse will arrive to clear it.
         case .notification(_, .permissionPrompt) where s.stopWindowActive:
-            s.status = .waiting
-            s.stopWindowActive = false
-            return (s, [
-                .cancelStopWindow(sessionId: sid),
-                .updateSessionStatus(sessionId: sid, status: .waiting),
-                .insertDevEvent(sessionId: sid, type: .permissionNeeded,
-                                title: "Claude Code needs your attention",
-                                cwd: s.cwd, attentionTier: .action)
-            ])
+            return (s, [])
 
-        // Rule 6: Notification(permissionPrompt) → waiting (not already waiting)
-        case .notification(_, .permissionPrompt) where s.status != .waiting:
+        // Rule 6: Notification(permissionPrompt) while busy → waiting.
+        // Only transition from .busy: idle/stale/completed sessions receiving a late
+        // notification must not be pulled back into waiting.
+        case .notification(_, .permissionPrompt) where s.status == .busy:
             s.status = .waiting
             return (s, [
                 .updateSessionStatus(sessionId: sid, status: .waiting),
@@ -80,7 +79,8 @@ public enum SessionStateReducer {
                                 cwd: s.cwd, attentionTier: .action)
             ])
 
-        // Rule 7: Notification(permissionPrompt) already waiting → no-op (idempotent)
+        // Rule 7: Notification(permissionPrompt) — any other state → no-op.
+        // Covers: already waiting (idempotent), idle, completed, stale.
         case .notification(_, .permissionPrompt):
             return (s, [])
 

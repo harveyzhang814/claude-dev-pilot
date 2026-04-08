@@ -134,24 +134,31 @@ struct SessionStateReducerTests {
         #expect(next.status == .waiting)
     }
 
-    // MARK: - Rule 5: Notification(permissionPrompt) during stop window → cancel + waiting
+    // MARK: - Rule 5: Notification(permissionPrompt) during stop window → no-op
+    // (Stop cannot fire while a permission dialog is genuinely open.
+    //  A delayed notification arriving during the stop window is stale.)
 
-    @Test func notificationPermissionPromptDuringStopWindowCancelsAndSetsWaiting() {
+    @Test func notificationPermissionPromptDuringStopWindowIsNoop() {
         var state = SessionMachineState.initial
         state.status = .idle
         state.stopWindowActive = true
         let (next, actions) = reduce(state, .notification(sessionId: sid, kind: .permissionPrompt))
-        #expect(next.status == .waiting)
-        #expect(next.stopWindowActive == false)
-        #expect(actions.contains(.cancelStopWindow(sessionId: sid)))
-        #expect(actions.contains(.updateSessionStatus(sessionId: sid, status: .waiting)))
-        #expect(actions.contains(.insertDevEvent(
-            sessionId: sid, type: .permissionNeeded,
-            title: "Claude Code needs your attention",
-            cwd: nil, attentionTier: .action)))
+        #expect(next.status == .idle)
+        #expect(next.stopWindowActive == true)   // window still active
+        #expect(actions.isEmpty)
     }
 
-    // MARK: - Rule 6: Notification(permissionPrompt) when not waiting → waiting
+    @Test func notificationPermissionPromptDuringStopWindowFromBusyIsNoop() {
+        var state = SessionMachineState.initial
+        state.status = .busy
+        state.stopWindowActive = true
+        let (next, actions) = reduce(state, .notification(sessionId: sid, kind: .permissionPrompt))
+        #expect(next.status == .busy)
+        #expect(next.stopWindowActive == true)
+        #expect(actions.isEmpty)
+    }
+
+    // MARK: - Rule 6: Notification(permissionPrompt) when busy → waiting
 
     @Test func notificationPermissionPromptFromBusySetsWaiting() {
         var state = SessionMachineState.initial
@@ -165,13 +172,61 @@ struct SessionStateReducerTests {
             cwd: nil, attentionTier: .action)))
     }
 
-    // MARK: - Rule 7: Notification(permissionPrompt) already waiting → no-op (idempotent)
+    // MARK: - Rule 7: Notification(permissionPrompt) — idle/waiting/completed → no-op
 
     @Test func notificationPermissionPromptWhenAlreadyWaitingIsNoop() {
         var state = SessionMachineState.initial
         state.status = .waiting
         let (next, actions) = reduce(state, .notification(sessionId: sid, kind: .permissionPrompt))
         #expect(next.status == .waiting)
+        #expect(actions.isEmpty)
+    }
+
+    @Test func notificationPermissionPromptWhenIdleIsNoop() {
+        // Idle session must not be pulled to waiting by a stale/delayed notification.
+        let (next, actions) = reduce(.initial, .notification(sessionId: sid, kind: .permissionPrompt))
+        #expect(next.status == .idle)
+        #expect(actions.isEmpty)
+    }
+
+    // MARK: - Regression: delayed Notification must not get session stuck at waiting
+
+    /// Regression: notify.sh is fire-and-forget (&). A Notification(permissionPrompt)
+    /// can arrive after PostToolUse + Stop, during the 2-second stop window.
+    /// Before the fix, Rule 5 cancelled the window and set status to .waiting,
+    /// leaving the session stuck with no subsequent event to clear it.
+    @Test func delayedNotificationDuringStopWindowDoesNotStickAtWaiting() {
+        var state = SessionMachineState.initial
+        var actions: [Action]
+
+        (state, _) = reduce(state, .userPromptSubmit(sessionId: sid))
+        (state, _) = reduce(state, .preToolUse(sessionId: sid, toolName: "Bash"))
+        // Permission needed but notification delivery is delayed — PostToolUse arrives first
+        (state, _) = reduce(state, .postToolUse(sessionId: sid, toolName: "Bash"))
+        #expect(state.status == .busy)   // no waiting state was ever set
+
+        (state, _) = reduce(state, .stop(sessionId: sid))
+        #expect(state.stopWindowActive == true)
+
+        // Delayed notification arrives during stop window — must be a no-op
+        (state, actions) = reduce(state, .notification(sessionId: sid, kind: .permissionPrompt))
+        #expect(state.status == .busy)          // unchanged
+        #expect(state.stopWindowActive == true)  // window still running
+        #expect(actions.isEmpty)
+
+        // Stop window expires normally → idle
+        (state, actions) = reduce(state, .stopWindowExpired(sessionId: sid))
+        #expect(state.status == .idle)
+    }
+
+    @Test func lateNotificationAfterIdleDoesNotStickAtWaiting() {
+        // Notification arrives AFTER the stop window has already expired → idle.
+        var state = SessionMachineState.initial
+        state.status = .idle
+        state.stopWindowActive = false
+
+        let (next, actions) = reduce(state, .notification(sessionId: sid, kind: .permissionPrompt))
+        #expect(next.status == .idle)
         #expect(actions.isEmpty)
     }
 
