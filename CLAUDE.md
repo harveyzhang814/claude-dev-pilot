@@ -32,8 +32,8 @@ swift test --filter AgentDevPilotTests
 swift test --filter ServerTests
 
 # Run a single test class or method
-swift test --filter SessionLifecycleTests
-swift test --filter SessionLifecycleTests/testProcessEvent
+swift test --filter SessionStateReducerTests
+swift test --filter HookStreamCoordinatorTests/testStopWindowResolvesToIdle
 
 # Build and launch the app as a proper .app bundle (required for notifications)
 make run
@@ -55,17 +55,22 @@ Agent Dev Pilot is a macOS menubar app that receives Claude Code and Cursor IDE 
 
 ```
 Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
-  → SessionLifecycleService.handleSessionLifecycle() for SessionStart/SessionEnd
-  → EventMapper (HookPayload → DevEvent) for Notification/UserPromptSubmit hooks
-  → SessionLifecycleService.processEvent() (persist event, update session state)
-  → StopWindowService (coalesces Stop + Notification within 2s to resolve idle/waiting)
-  → NotificationBatcher (debounce/throttle)
+  → HookLog INSERT (raw audit, per request)
+  → HookEventClassifier.classify(payload) → HookEvent (typed enum)
+  → HookStreamCoordinator.process(payload)
+      → SessionStateReducer.reduce(state, event) → (nextState, [Action])
+      → execute(actions):
+            upsertSession / updateSessionStatus  → GRDB writes
+            insertDevEvent                       → GRDB writes
+            dismissPriorEvents                   → GRDB writes
+            startStopWindow / cancelStopWindow   → internal Task management
+  → onEvent callback → NotificationBatcher (debounce/throttle)
   → NotificationService (UNUserNotificationCenter)
   → AppState publishes to SwiftUI via GRDB ValueObservation
 
 Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHandler.postCursorEvent
   → CursorNormalizer.normalize() (CursorHookPayload → HookPayload, injects tool="cursor")
-  → same pipeline as above (SessionStart/SessionEnd → lifecycle; Stop → StopWindowService)
+  → same pipeline as above
   → unknown hook events silently dropped (200 OK, no DevEvent created)
 ```
 
@@ -86,12 +91,13 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
 | `CursorNormalizer` | Core/Models | Converts `CursorHookPayload` → `HookPayload`: maps `workspace_roots[0]`→`cwd`, PascalCase event names, injects `tool="cursor"` |
 | `DevEvent` | Core/Models | Persisted event (GRDB `FetchableRecord`/`PersistableRecord`) |
 | `DevSession` | Core/Models | Session grouping events by `session_id`. `tool` field: "claude-code" or "cursor" |
-| `EventMapper` | Core/Models | Maps `HookPayload` → `DevEvent`, infers `EventType` and `AttentionTier` |
+| `HookEvent` | Core/Models | Typed enum representation of a hook payload. `stopWindowExpired` is a virtual event injected by `HookStreamCoordinator` when the 2s stop window elapses without a `Notification` |
 | `DatabaseManager` | Core/Store | Opens GRDB `DatabasePool`, runs migrations |
 | `EventStore` / `SessionStore` | Core/Store | CRUD + pruning. `EventStore.fetchGroupedBySession(sessionIds:limit:in:)` fetches ≤5 undismissed non-background events per session. Always use typed GRDB queries, never raw SQL for updates |
 | `HookLog` / `HookLogStore` | Core/Models + Core/Store | Debug audit log: one row per incoming HTTP request, inserted before any business logic. Fields: `hookEventName`, `sessionId`, `notificationType`, `rawPayload` (true raw JSON), `receivedAt`. Parse failures stored with `hookEventName = "PARSE_ERROR"`. Pruned by same `retentionDays` as events |
-| `SessionLifecycleService` | Core/Services | Handles `SessionStart`/`SessionEnd` hook lifecycle and `processEvent()` for event-driven state transitions |
-| `StopWindowService` | Core/Services | Actor that coalesces Stop + Notification hooks within a 2s window; resolves session to `.idle` (agentStopped event written) or `.waiting` |
+| `HookEventClassifier` | Core/Services | Pure `HookPayload → HookEvent?` classifier. Returns `nil` for unrecognised hook names (caller silently ignores) |
+| `SessionStateReducer` | Core/Services | Pure reducer: `(SessionMachineState, HookEvent) → (SessionMachineState, [Action])`. 13 rules covering all session state transitions. No I/O |
+| `HookStreamCoordinator` | Core/Services | Actor that drives the pipeline: calls classifier → reducer → executes `[Action]` (DB writes, stop window tasks). Maintains per-session `SessionMachineState` in memory |
 | `NotificationBatcher` | Core/Services | Per-session batching (>3 events/2s) + global throttle (5/10s) |
 | `AuthTokenService` | Core/Services | Generates and persists a 32-byte hex token at `~/.agent-dev-pilot/token` (0600) |
 | `HookInstaller` | Core/Services | Embeds `notify.sh` and `cursor-notify.sh` scripts; writes to `~/.agent-dev-pilot/hooks/`. `claudeCodePrompt()` and `cursorAgentPrompt()` generate hook registration prompts |
@@ -129,13 +135,13 @@ Token at `~/.agent-dev-pilot/token` (0600 permissions). `notify.sh` reads this t
 
 States: `idle` (active, no task) | `busy` (executing) | `waiting` (needs user input) | `completed` (SessionEnd received) | `stale` (inactive 30 min)
 
-State transitions in `SessionLifecycleService`:
+State transitions computed by `SessionStateReducer.reduce()`, executed by `HookStreamCoordinator`:
 - `SessionStart` hook → create session as `.idle`; if completed/stale, reopen to `.idle`
 - `SessionEnd` hook → `.completed` (stamps `ended_at`)
-- `promptSubmitted` / `authSuccess` event → `.busy`; all prior events for session auto-dismissed
-- `permissionNeeded` event → `.waiting`
-- `agentStopped` event → no direct transition; `StopWindowService` resolves after 2s window: Stop-only → `.idle`, Stop+Notification → `.waiting`
-- Any event on a completed/stale session → reopen to `.idle`
+- `UserPromptSubmit` hook → `.busy`; all prior events for session auto-dismissed
+- `Notification(permissionNeeded)` hook → `.waiting`
+- `Stop` hook → starts 2s stop window; window expiry (no `Notification`) → `.idle`; Stop + `Notification` within 2s → `.waiting`
+- Any hook on a completed/stale session → reopen to `.idle`
 - 60s timer in `AppState` → `.stale` for sessions with no activity for 30 minutes
 
 ### Stale session and pruning
@@ -183,7 +189,8 @@ The panel renders `FloatWindowCompactView` (compact), `FloatWindowHoverView` (ho
 
 - All store/service tests use `DatabaseManager.openInMemoryDatabase()` — never a file-based DB
 - Server tests use `HummingbirdTesting` with `buildApp()` (not `start()`, which binds to a port)
-- `SessionLifecycleService` and `NotificationBatcher` are the highest-risk components for concurrency bugs; test edge cases (rapid events, state reopening)
+- `HookStreamCoordinator` and `NotificationBatcher` are the highest-risk components for concurrency bugs; test edge cases (rapid events, state reopening, stop window races)
+- `SessionStateReducer` is pure (no I/O) — test all 13 rules in isolation via `SessionStateReducerTests`
 
 ---
 
