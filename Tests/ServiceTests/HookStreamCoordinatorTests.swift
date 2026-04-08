@@ -165,6 +165,45 @@ struct HookStreamCoordinatorTests {
         #expect(session?.cwd == "/Users/alice/Projects/api-server")
     }
 
+    // MARK: - Missed SessionStart + SessionEnd: ghost idle session must NOT be created
+
+    /// Regression test: when SessionStart was missed and SessionEnd is the first
+    /// hook received, the fallback must not create a ghost "idle" session.
+    /// Before the fix, updateSessionStatus's else-branch created a new session
+    /// with status:.idle regardless of the requested status.
+    @Test func missedSessionStartSessionEndDoesNotCreateGhostSession() async throws {
+        let db = try makeDB()
+        let coord = makeCoordinator(db: db)
+
+        // No SessionStart — app was offline. SessionEnd arrives first.
+        await coord.process(payload("SessionEnd", cwd: "/Users/alice/Projects/my-app"))
+
+        let session = try await db.read { try DevSession.fetchOne($0, key: "s1") }
+        // Session should either not exist in DB, or be completed — never idle.
+        if let session {
+            #expect(session.status == .completed,
+                    "SessionEnd for unknown session must not create an idle ghost session")
+        }
+        // Preferred outcome: no session created at all
+        // (both nil and .completed are acceptable; .idle is the bug)
+    }
+
+    /// When SessionStart was missed but some hooks DID fire (creating a session),
+    /// SessionEnd should still close it to .completed.
+    @Test func missedSessionStartSessionEndClosesTrackedSession() async throws {
+        let db = try makeDB()
+        let coord = makeCoordinator(db: db)
+
+        // First hook creates session via missed-SessionStart fallback
+        await coord.process(payload("UserPromptSubmit", cwd: "/Users/alice/Projects/my-app"))
+        // Then Claude exits
+        await coord.process(payload("SessionEnd", cwd: "/Users/alice/Projects/my-app"))
+
+        let session = try await db.read { try DevSession.fetchOne($0, key: "s1") }
+        #expect(session?.status == .completed,
+                "SessionEnd must close a previously tracked session to .completed")
+    }
+
     // MARK: - PreToolUse/AskUserQuestion produces permissionNeeded event
 
     @Test func preToolUseAskUserQuestionInsertsPermissionNeededEvent() async throws {

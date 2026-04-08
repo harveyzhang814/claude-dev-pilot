@@ -113,8 +113,10 @@ public actor HookStreamCoordinator {
                                 """,
                             arguments: [status.rawValue, sid]
                         )
-                    } else {
-                        // SessionStart was missed — create a minimal session
+                    } else if status != .completed && status != .stale {
+                        // SessionStart was missed — create a minimal session.
+                        // Only for active statuses: terminal states (completed/stale)
+                        // must not create a ghost session for a session we never tracked.
                         let project = fallbackCwd.map {
                             URL(fileURLWithPath: $0).lastPathComponent
                         } ?? "unknown"
