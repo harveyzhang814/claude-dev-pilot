@@ -115,6 +115,37 @@ struct HookStreamCoordinatorTests {
         #expect(session?.status == .idle)
     }
 
+    // MARK: - Missed SessionStart: cwd captured from subsequent hooks
+
+    /// Regression test: when SessionStart was missed (app was offline), the first
+    /// non-SessionStart hook must create a session with the real cwd/project, not "unknown".
+    @Test func missedSessionStartCapturesCwdFromFirstHook() async throws {
+        let db = try makeDB()
+        let coord = makeCoordinator(db: db)
+
+        // No SessionStart — simulate app starting after Claude Code was already running.
+        // UserPromptSubmit arrives first with the real cwd.
+        await coord.process(payload("UserPromptSubmit", cwd: "/Users/alice/Projects/my-app"))
+
+        let session = try await db.read { try DevSession.fetchOne($0, key: "s1") }
+        #expect(session != nil)
+        #expect(session?.project == "my-app")
+        #expect(session?.cwd == "/Users/alice/Projects/my-app")
+    }
+
+    @Test func missedSessionStartCapturesCwdFromPreToolUse() async throws {
+        let db = try makeDB()
+        let coord = makeCoordinator(db: db)
+
+        // PreToolUse arrives first (SessionStart was missed)
+        await coord.process(payload("PreToolUse", cwd: "/Users/alice/Projects/api-server", toolName: "Bash"))
+
+        let session = try await db.read { try DevSession.fetchOne($0, key: "s1") }
+        #expect(session != nil)
+        #expect(session?.project == "api-server")
+        #expect(session?.cwd == "/Users/alice/Projects/api-server")
+    }
+
     // MARK: - PreToolUse/AskUserQuestion produces permissionNeeded event
 
     @Test func preToolUseAskUserQuestionInsertsPermissionNeededEvent() async throws {

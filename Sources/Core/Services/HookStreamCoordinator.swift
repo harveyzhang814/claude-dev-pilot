@@ -23,7 +23,14 @@ public actor HookStreamCoordinator {
     public func process(_ payload: HookPayload) async {
         guard let event = HookEventClassifier.classify(payload) else { return }
         let sid = event.sessionId
-        let current = states[sid] ?? .initial
+        var current = states[sid] ?? .initial
+        // Capture cwd from any hook, not just SessionStart. This ensures the
+        // missed-SessionStart fallback can create a session with the real project
+        // directory instead of "unknown" when a pre-existing session sends its
+        // first hook after the app starts.
+        if current.cwd == nil && !payload.cwd.isEmpty {
+            current.cwd = payload.cwd
+        }
         let (next, actions) = SessionStateReducer.reduce(current, event)
         states[sid] = next
         await execute(actions)
