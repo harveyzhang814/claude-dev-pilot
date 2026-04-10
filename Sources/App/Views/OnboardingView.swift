@@ -17,7 +17,7 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 24) {
             // Title
-            Text("Welcome to Agent Dev Pilot")
+            Text("Welcome to Agent Pilot")
                 .font(.title2)
                 .fontWeight(.semibold)
 
@@ -89,7 +89,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 if scriptInstalled {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                    Text("Hook script installed at ~/.agent-dev-pilot/hooks/notify.sh")
+                    Text("Hook script installed at ~/.agentpilot/hooks/notify.sh")
                         .foregroundColor(.green)
                 } else if let err = scriptError {
                     Image(systemName: "xmark.circle.fill").foregroundColor(.red)
@@ -150,7 +150,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 if cursorScriptInstalled {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                    Text("Cursor hook script installed at ~/.agent-dev-pilot/hooks/cursor-notify.sh")
+                    Text("Cursor hook script installed at ~/.agentpilot/hooks/cursor-notify.sh")
                         .foregroundColor(.green)
                 } else if let err = cursorScriptError {
                     Image(systemName: "xmark.circle.fill").foregroundColor(.red)
@@ -272,7 +272,7 @@ struct OnboardingView: View {
             Label("Step 3: All Set!", systemImage: "3.circle.fill")
                 .font(.headline)
 
-            Text("Agent Dev Pilot is ready. It will monitor your Claude sessions and notify you when action is needed.")
+            Text("Agent Pilot is ready. It will monitor your Claude sessions and notify you when action is needed.")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
         }

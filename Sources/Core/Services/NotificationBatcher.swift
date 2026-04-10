@@ -110,7 +110,7 @@ public final class NotificationBatcher: @unchecked Sendable {
                 event: nil, sessionId: "", eventCount: globalNotificationCount,
                 isBatched: false, isSummary: true,
                 title: "\(globalNotificationCount) events across multiple projects",
-                body: "Open Agent Dev Pilot to see details"
+                body: "Open Agent Pilot to see details"
             ))
         } else {
             onNotification(notification)

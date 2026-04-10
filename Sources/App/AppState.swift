@@ -34,7 +34,7 @@ public final class AppState {
 
     // Float window
     private var floatWindowController: FloatWindowController?
-    /// Set by AgentDevPilotApp at startup; used as the onFocusSession callback for FloatWindowController.
+    /// Set by AgentPilotApp at startup; used as the onFocusSession callback for FloatWindowController.
     var focusSessionHandler: ((DevSession) -> Void)?
 
     // Server task
@@ -164,7 +164,7 @@ public final class AppState {
             }
             try SessionStore.markStale(ids: toMark.map(\.id), in: db)
         } catch {
-            print("[AgentDevPilot] markStaleSessions failed: \(error)")
+            print("[AgentPilot] markStaleSessions failed: \(error)")
         }
     }
 
@@ -220,4 +220,5 @@ public final class AppState {
     func revealFloatWindow() {
         floatWindowController?.reveal()
     }
+
 }

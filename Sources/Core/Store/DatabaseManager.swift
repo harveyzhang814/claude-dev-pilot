@@ -130,7 +130,7 @@ public enum DatabaseManager {
 
     public static var defaultDatabasePath: String {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appDir = appSupport.appendingPathComponent("AgentDevPilot")
+        let appDir = appSupport.appendingPathComponent("AgentPilot")
         try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
         return appDir.appendingPathComponent("db.sqlite").path
     }

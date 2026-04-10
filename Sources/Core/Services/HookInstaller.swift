@@ -6,7 +6,7 @@ public enum HookInstaller {
 
     public static var hooksDirectory: String {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".agent-dev-pilot/hooks").path
+            .appendingPathComponent(".agentpilot/hooks").path
     }
 
     public static var scriptPath: String {
@@ -17,13 +17,13 @@ public enum HookInstaller {
 
     static let scriptContent = """
     #!/bin/bash
-    # Agent Dev Pilot — Claude Code hook helper script
+    # Agent Pilot — Claude Code hook helper script
     # Reads hook event JSON from stdin and forwards to the local HTTP server.
     #
     # SECURITY: Use --data-binary @- to pipe stdin directly to curl.
     # Do NOT capture stdin into a variable (shell expansion risk).
     # head -c 65536 enforces 64KB max payload at the source.
-    TOKEN=$(cat ~/.agent-dev-pilot/token 2>/dev/null)
+    TOKEN=$(cat ~/.agentpilot/token 2>/dev/null)
     cat | head -c 65536 | curl -s -X POST http://127.0.0.1:9876/event \\
       -H 'Content-Type: application/json' \\
       -H "Authorization: Bearer $TOKEN" \\
@@ -36,7 +36,7 @@ public enum HookInstaller {
 
     // MARK: - Install
 
-    /// Writes notify.sh to ~/.agent-dev-pilot/hooks/ with 0755 permissions.
+    /// Writes notify.sh to ~/.agentpilot/hooks/ with 0755 permissions.
     /// Safe to call repeatedly — only writes if content has changed.
     public static func installScript() throws {
         let fm = FileManager.default
@@ -74,13 +74,13 @@ public enum HookInstaller {
     /// Fire-and-forget — never blocks Cursor's workflow.
     static let cursorScriptContent = """
     #!/bin/bash
-    # Agent Dev Pilot — Cursor hook
+    # Agent Pilot — Cursor hook
     # Cursor passes payload via stdin as JSON
 
-    TOKEN_FILE=~/.agent-dev-pilot/token
+    TOKEN_FILE=~/.agentpilot/token
     [ -f "$TOKEN_FILE" ] || exit 0
     TOKEN=$(cat "$TOKEN_FILE")
-    PORT=${AGENT_DEV_PILOT_PORT:-9876}
+    PORT=${AGENT_PILOT_PORT:-9876}
 
     head -c 65536 | curl -s \\
       -X POST "http://127.0.0.1:$PORT/cursor-event" \\
@@ -92,7 +92,7 @@ public enum HookInstaller {
     # Fire-and-forget: if app is not running, event is silently lost.
     """
 
-    /// Writes cursor-notify.sh to ~/.agent-dev-pilot/hooks/ with 0755 permissions.
+    /// Writes cursor-notify.sh to ~/.agentpilot/hooks/ with 0755 permissions.
     /// Safe to call repeatedly — only writes if content has changed.
     public static func installCursorScript() throws {
         let fm = FileManager.default
@@ -114,8 +114,32 @@ public enum HookInstaller {
         return existing == cursorScriptContent
     }
 
+    /// Returns a prompt the user can paste into Cursor Agent.
+    /// Cursor Agent will merge the hooks into ~/.cursor/hooks.json.
+    public static func cursorAgentPrompt() -> String {
+        """
+        Please add sessionStart, sessionEnd, and stop hooks to my Cursor hooks \
+        configuration (~/.cursor/hooks.json) for Agent Pilot.
+
+        All three hooks should run `~/.agentpilot/hooks/cursor-notify.sh`.
+
+        Target JSON to merge under the "hooks" key (create the file if it doesn't exist, \
+        set "version": 1 at the top level):
+        {
+          "sessionStart": [{ "command": "~/.agentpilot/hooks/cursor-notify.sh" }],
+          "sessionEnd":   [{ "command": "~/.agentpilot/hooks/cursor-notify.sh" }],
+          "stop":         [{ "command": "~/.agentpilot/hooks/cursor-notify.sh" }]
+        }
+
+        Rules:
+        - Only add entries that do not already exist.
+        - Preserve all existing hooks exactly as-is.
+        - Do not modify any other keys in hooks.json.
+        """
+    }
+
     /// Returns a prompt the user can paste into Cursor Agent to remove all Agent Pilot hooks.
-    /// Only removes entries whose command is `~/.agent-dev-pilot/hooks/cursor-notify.sh`.
+    /// Only removes entries whose command is `~/.agentpilot/hooks/cursor-notify.sh`.
     /// Does not modify any other hooks or hooks.json keys.
     public static func cursorAgentRemovePrompt() -> String {
         """
@@ -123,8 +147,8 @@ public enum HookInstaller {
         configuration (~/.cursor/hooks.json).
 
         Remove any hook entry whose "command" value is \
-        "~/.agent-dev-pilot/hooks/cursor-notify.sh" (including tilde-expanded \
-        variants such as "/Users/<username>/.agent-dev-pilot/hooks/cursor-notify.sh").
+        "~/.agentpilot/hooks/cursor-notify.sh" (including tilde-expanded \
+        variants such as "/Users/<username>/.agentpilot/hooks/cursor-notify.sh").
 
         This applies to all hook event keys: sessionStart, sessionEnd, stop — \
         and any others that may reference the same command.
@@ -134,30 +158,6 @@ public enum HookInstaller {
         - If removing entries leaves a hook event key's array empty, \
         remove that hook event key entirely.
         - Preserve all other hooks and hooks.json keys exactly as-is.
-        - Do not modify any other keys in hooks.json.
-        """
-    }
-
-    /// Returns a prompt the user can paste into Cursor Agent.
-    /// Cursor Agent will merge the hooks into ~/.cursor/hooks.json.
-    public static func cursorAgentPrompt() -> String {
-        """
-        Please add sessionStart, sessionEnd, and stop hooks to my Cursor hooks \
-        configuration (~/.cursor/hooks.json) for Agent Dev Pilot.
-
-        All three hooks should run `~/.agent-dev-pilot/hooks/cursor-notify.sh`.
-
-        Target JSON to merge under the "hooks" key (create the file if it doesn't exist, \
-        set "version": 1 at the top level):
-        {
-          "sessionStart": [{ "command": "~/.agent-dev-pilot/hooks/cursor-notify.sh" }],
-          "sessionEnd":   [{ "command": "~/.agent-dev-pilot/hooks/cursor-notify.sh" }],
-          "stop":         [{ "command": "~/.agent-dev-pilot/hooks/cursor-notify.sh" }]
-        }
-
-        Rules:
-        - Only add entries that do not already exist.
-        - Preserve all existing hooks exactly as-is.
         - Do not modify any other keys in hooks.json.
         """
     }
@@ -173,52 +173,52 @@ public enum HookInstaller {
     public static func claudeCodePrompt() -> String {
         """
         Please add the following hooks to my Claude Code \
-        settings (~/.claude/settings.json) for Agent Dev Pilot.
+        settings (~/.claude/settings.json) for Agent Pilot.
 
-        All hooks should run `~/.agent-dev-pilot/hooks/notify.sh`.
+        All hooks should run `~/.agentpilot/hooks/notify.sh`.
 
         Target JSON to merge under the "hooks" key:
         {
           "SessionStart": [
             {
               "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+              "hooks": [{ "type": "command", "command": "~/.agentpilot/hooks/notify.sh" }]
             }
           ],
           "SessionEnd": [
             {
               "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+              "hooks": [{ "type": "command", "command": "~/.agentpilot/hooks/notify.sh" }]
             }
           ],
           "UserPromptSubmit": [
             {
               "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+              "hooks": [{ "type": "command", "command": "~/.agentpilot/hooks/notify.sh" }]
             }
           ],
           "PreToolUse": [
             {
               "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+              "hooks": [{ "type": "command", "command": "~/.agentpilot/hooks/notify.sh" }]
             }
           ],
           "PostToolUse": [
             {
               "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+              "hooks": [{ "type": "command", "command": "~/.agentpilot/hooks/notify.sh" }]
             }
           ],
           "Stop": [
             {
               "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+              "hooks": [{ "type": "command", "command": "~/.agentpilot/hooks/notify.sh" }]
             }
           ],
           "Notification": [
             {
               "matcher": "",
-              "hooks": [{ "type": "command", "command": "~/.agent-dev-pilot/hooks/notify.sh" }]
+              "hooks": [{ "type": "command", "command": "~/.agentpilot/hooks/notify.sh" }]
             }
           ]
         }
@@ -231,7 +231,7 @@ public enum HookInstaller {
     }
 
     /// Returns a prompt the user can paste into Claude Code to remove all Agent Pilot hooks.
-    /// Only removes entries whose command is `~/.agent-dev-pilot/hooks/notify.sh`.
+    /// Only removes entries whose command is `~/.agentpilot/hooks/notify.sh`.
     /// Does not modify any other hooks or settings.json keys.
     public static func claudeCodeRemovePrompt() -> String {
         """
@@ -239,8 +239,8 @@ public enum HookInstaller {
         settings (~/.claude/settings.json).
 
         Remove any hook entry whose "command" value is \
-        "~/.agent-dev-pilot/hooks/notify.sh" (including tilde-expanded \
-        variants such as "/Users/<username>/.agent-dev-pilot/hooks/notify.sh").
+        "~/.agentpilot/hooks/notify.sh" (including tilde-expanded \
+        variants such as "/Users/<username>/.agentpilot/hooks/notify.sh").
 
         This applies to all hook event keys: SessionStart, SessionEnd, \
         UserPromptSubmit, PreToolUse, PostToolUse, Stop, Notification — \
@@ -256,4 +256,5 @@ public enum HookInstaller {
         - Do not modify any other keys in settings.json.
         """
     }
+
 }

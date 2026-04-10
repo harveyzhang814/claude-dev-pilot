@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import AgentDevPilot
+@testable import AgentPilot
 
 struct FloatWindowHeightTests {
     @Test func clampedExpandedHeight_normalValue() {

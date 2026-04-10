@@ -3,7 +3,7 @@ import Foundation
 public enum AuthTokenService {
     public static var defaultTokenPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let dir = home.appendingPathComponent(".agent-dev-pilot")
+        let dir = home.appendingPathComponent(".agentpilot")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("token").path
     }

@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Core
-@testable import AgentDevPilot
+@testable import AgentPilot
 
 @Suite("SessionGroupView helpers")
 struct SessionGroupViewTests {

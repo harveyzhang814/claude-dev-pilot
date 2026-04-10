@@ -2,7 +2,7 @@ import SwiftUI
 import Core
 
 @main
-struct AgentDevPilotApp: App {
+struct AgentPilotApp: App {
     @State private var appState: AppState = AppState()
 
     var body: some Scene {

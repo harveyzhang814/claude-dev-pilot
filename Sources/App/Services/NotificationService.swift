@@ -6,7 +6,7 @@ import Core
 public final class NotificationService {
     public static let shared = NotificationService()
     private let center = UNUserNotificationCenter.current()
-    private let categoryIdentifier = "AGENT_DEV_PILOT_EVENT"
+    private let categoryIdentifier = "AGENT_PILOT_EVENT"
 
     private init() {}
 

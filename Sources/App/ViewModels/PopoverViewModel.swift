@@ -70,7 +70,7 @@ public final class PopoverViewModel {
         do {
             try EventStore.dismiss(id: eventId, in: db)
         } catch {
-            print("[AgentDevPilot] dismiss failed for event \(eventId): \(error)")
+            print("[AgentPilot] dismiss failed for event \(eventId): \(error)")
         }
     }
 

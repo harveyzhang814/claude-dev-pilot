@@ -1,5 +1,5 @@
 import Testing
-@testable import AgentDevPilot
+@testable import AgentPilot
 
 struct ViewUtilsTests {
     @Test func tokenLabel_belowThousand() {

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Agent Dev Pilot — one-shot packaging script
-# Produces: dist/AgentDevPilot-<version>.dmg
+# Agent Pilot — one-shot packaging script
+# Produces: dist/AgentPilot-<version>.dmg
 #
 # Usage:
 #   ./scripts/package.sh           # release build
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
-APP_NAME="AgentDevPilot"
+APP_NAME="AgentPilot"
 BUNDLE_NAME="${APP_NAME}.app"
 PLIST="Sources/App/Info.plist"
 DIST_DIR="dist"
@@ -35,7 +35,7 @@ VERSION=$(plutil -extract CFBundleShortVersionString raw "$PLIST" 2>/dev/null) \
 DMG_NAME="${APP_NAME}-${VERSION}.dmg"
 
 echo "╔══════════════════════════════════════════╗"
-echo "║  Agent Dev Pilot — package v${VERSION}"
+echo "║  Agent Pilot — package v${VERSION}"
 echo "║  Config: ${BUILD_CONFIG}"
 echo "╚══════════════════════════════════════════╝"
 
@@ -70,7 +70,7 @@ cp -R "$BUNDLE_NAME" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
 
 hdiutil create \
-    -volname "Agent Dev Pilot ${VERSION}" \
+    -volname "Agent Pilot ${VERSION}" \
     -srcfolder "$STAGING" \
     -ov \
     -format UDZO \
@@ -91,5 +91,5 @@ echo
 echo "  Output: $(du -sh "${DIST_DIR}/${DMG_NAME}" | cut -f1)  ${DIST_DIR}/${DMG_NAME}"
 echo
 echo "  To install: open ${DIST_DIR}/${DMG_NAME}"
-echo "  Then drag Agent Dev Pilot → Applications"
+echo "  Then drag Agent Pilot → Applications"
 echo
