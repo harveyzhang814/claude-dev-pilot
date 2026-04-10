@@ -39,7 +39,7 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Sources/App",
-            exclude: ["Info.plist"],
+            exclude: ["Info.plist", "Resources/AppIcon.icns"],
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
