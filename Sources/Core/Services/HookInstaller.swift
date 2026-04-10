@@ -213,13 +213,20 @@ public enum HookInstaller {
     /// Called once during migration; safe to call repeatedly (no-ops if already clean).
     public static func removeOldHookEntries() {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let oldPrefix = home.appendingPathComponent(".agent-dev-pilot/hooks").path
-
-        removeOldClaudeCodeHooks(oldPrefix: oldPrefix)
-        removeOldCursorHooks(oldPrefix: oldPrefix)
+        // Match both tilde-form and absolute-form paths
+        let oldPrefixes = [
+            "~/.agent-dev-pilot/hooks",
+            home.appendingPathComponent(".agent-dev-pilot/hooks").path,
+        ]
+        removeOldClaudeCodeHooks(oldPrefixes: oldPrefixes)
+        removeOldCursorHooks(oldPrefixes: oldPrefixes)
     }
 
-    private static func removeOldClaudeCodeHooks(oldPrefix: String) {
+    private static func isOldCommand(_ cmd: String, oldPrefixes: [String]) -> Bool {
+        oldPrefixes.contains { cmd.hasPrefix($0) }
+    }
+
+    private static func removeOldClaudeCodeHooks(oldPrefixes: [String]) {
         let path = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json").path
         guard let data = FileManager.default.contents(atPath: path),
@@ -231,10 +238,10 @@ public enum HookInstaller {
             guard var matchers = value as? [[String: Any]] else { continue }
             var matcherChanged = false
             for i in matchers.indices {
-                guard var hooks = matchers[i]["hooks"] as? [[String: Any]] else { continue }
+                guard let hooks = matchers[i]["hooks"] as? [[String: Any]] else { continue }
                 let filtered = hooks.filter { hook in
                     guard let cmd = hook["command"] as? String else { return true }
-                    return !cmd.hasPrefix(oldPrefix)
+                    return !isOldCommand(cmd, oldPrefixes: oldPrefixes)
                 }
                 if filtered.count != hooks.count {
                     matchers[i]["hooks"] = filtered
@@ -258,7 +265,7 @@ public enum HookInstaller {
         try? out.write(to: URL(fileURLWithPath: path))
     }
 
-    private static func removeOldCursorHooks(oldPrefix: String) {
+    private static func removeOldCursorHooks(oldPrefixes: [String]) {
         let path = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cursor/hooks.json").path
         guard let data = FileManager.default.contents(atPath: path),
@@ -270,7 +277,7 @@ public enum HookInstaller {
             guard let entries = value as? [[String: Any]] else { continue }
             let filtered = entries.filter { entry in
                 guard let cmd = entry["command"] as? String else { return true }
-                return !cmd.hasPrefix(oldPrefix)
+                return !isOldCommand(cmd, oldPrefixes: oldPrefixes)
             }
             if filtered.count != entries.count {
                 hooksMap[eventName] = filtered

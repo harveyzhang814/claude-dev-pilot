@@ -237,9 +237,10 @@ public final class AppState {
         let newDotDir = home.appendingPathComponent(".agentpilot")
         if fm.fileExists(atPath: oldDotDir.path) && !fm.fileExists(atPath: newDotDir.path) {
             try? fm.moveItem(at: oldDotDir, to: newDotDir)
-            // Remove stale hook entries from Claude Code / Cursor config files
-            HookInstaller.removeOldHookEntries()
         }
+
+        // Always clean up stale hook entries (idempotent — no-ops if already clean)
+        HookInstaller.removeOldHookEntries()
 
         // ~/Library/Application Support/AgentDevPilot → AgentPilot
         if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
