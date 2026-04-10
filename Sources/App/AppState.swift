@@ -34,7 +34,7 @@ public final class AppState {
 
     // Float window
     private var floatWindowController: FloatWindowController?
-    /// Set by AgentDevPilotApp at startup; used as the onFocusSession callback for FloatWindowController.
+    /// Set by AgentPilotApp at startup; used as the onFocusSession callback for FloatWindowController.
     var focusSessionHandler: ((DevSession) -> Void)?
 
     // Server task
@@ -43,6 +43,9 @@ public final class AppState {
     public init() {}
 
     public func start() async {
+        // Migrate data from old "Agent Dev Pilot" paths to new "Agent Pilot" paths
+        migrateFromLegacyPaths()
+
         // Set up database
         do {
             let dbPool = try DatabaseManager.openDatabase(at: DatabaseManager.defaultDatabasePath)
@@ -164,7 +167,7 @@ public final class AppState {
             }
             try SessionStore.markStale(ids: toMark.map(\.id), in: db)
         } catch {
-            print("[AgentDevPilot] markStaleSessions failed: \(error)")
+            print("[AgentPilot] markStaleSessions failed: \(error)")
         }
     }
 
@@ -219,5 +222,30 @@ public final class AppState {
 
     func revealFloatWindow() {
         floatWindowController?.reveal()
+    }
+
+    // MARK: - Legacy migration
+
+    /// Migrates data from the old "Agent Dev Pilot" paths to the new "Agent Pilot" paths.
+    /// Runs once; subsequent calls are no-ops because the old directories will be absent.
+    private func migrateFromLegacyPaths() {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser
+
+        // ~/.agent-dev-pilot → ~/.agentpilot
+        let oldDotDir = home.appendingPathComponent(".agent-dev-pilot")
+        let newDotDir = home.appendingPathComponent(".agentpilot")
+        if fm.fileExists(atPath: oldDotDir.path) && !fm.fileExists(atPath: newDotDir.path) {
+            try? fm.moveItem(at: oldDotDir, to: newDotDir)
+        }
+
+        // ~/Library/Application Support/AgentDevPilot → AgentPilot
+        if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let oldAppDir = appSupport.appendingPathComponent("AgentDevPilot")
+            let newAppDir = appSupport.appendingPathComponent("AgentPilot")
+            if fm.fileExists(atPath: oldAppDir.path) && !fm.fileExists(atPath: newAppDir.path) {
+                try? fm.moveItem(at: oldAppDir, to: newAppDir)
+            }
+        }
     }
 }

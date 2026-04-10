@@ -28,7 +28,7 @@ swift build -c debug
 swift test
 
 # Run a single test target
-swift test --filter AgentDevPilotTests
+swift test --filter AgentPilotTests
 swift test --filter ServerTests
 
 # Run a single test class or method
@@ -49,7 +49,7 @@ make clean
 
 ## Architecture
 
-Agent Dev Pilot is a macOS menubar app that receives Claude Code and Cursor IDE hook events via HTTP and surfaces them as native notifications and a popover UI.
+Agent Pilot is a macOS menubar app that receives Claude Code and Cursor IDE hook events via HTTP and surfaces them as native notifications and a popover UI.
 
 ### Event flow
 
@@ -78,8 +78,8 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
 
 - **Core** (`Sources/Core/`) — models, stores, services. No UI, no server dependencies. Used by both the app and test targets.
 - **Server** (`Sources/Server/`) — Hummingbird HTTP server. Depends on Core.
-- **AgentDevPilot** (`Sources/App/`) — SwiftUI executable. Depends on Core + Server.
-- **AgentDevPilotTests** (`Tests/`) — unit tests for Core (excludes `Tests/ServerTests/`).
+- **AgentPilot** (`Sources/App/`) — SwiftUI executable. Depends on Core + Server.
+- **AgentPilotTests** (`Tests/`) — unit tests for Core (excludes `Tests/ServerTests/`).
 - **ServerTests** (`Tests/ServerTests/`) — integration tests for the HTTP layer using `HummingbirdTesting`.
 
 ### Key types
@@ -99,8 +99,8 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
 | `SessionStateReducer` | Core/Services | Pure reducer: `(SessionMachineState, HookEvent) → (SessionMachineState, [Action])`. 13 rules covering all session state transitions. No I/O |
 | `HookStreamCoordinator` | Core/Services | Actor that drives the pipeline: calls classifier → reducer → executes `[Action]` (DB writes, stop window tasks). Maintains per-session `SessionMachineState` in memory |
 | `NotificationBatcher` | Core/Services | Per-session batching (>3 events/2s) + global throttle (5/10s) |
-| `AuthTokenService` | Core/Services | Generates and persists a 32-byte hex token at `~/.agent-dev-pilot/token` (0600) |
-| `HookInstaller` | Core/Services | Embeds `notify.sh` and `cursor-notify.sh` scripts; writes to `~/.agent-dev-pilot/hooks/`. `claudeCodePrompt()` and `cursorAgentPrompt()` generate hook registration prompts |
+| `AuthTokenService` | Core/Services | Generates and persists a 32-byte hex token at `~/.agentpilot/token` (0600) |
+| `HookInstaller` | Core/Services | Embeds `notify.sh` and `cursor-notify.sh` scripts; writes to `~/.agentpilot/hooks/`. `claudeCodePrompt()` and `cursorAgentPrompt()` generate hook registration prompts |
 | `EventServer` | Server | Hummingbird app builder. `buildApp()` for tests, `start()` for production. `configureRoutes` registers `/event` and `/cursor-event` |
 | `AuthMiddleware` | Server | Bearer token validation. `/health` bypasses auth |
 | `AppState` | App | `@Observable` root object. Owns DB, server task, batcher, stale timer |
@@ -122,14 +122,14 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
 
 ### Database
 
-- SQLite via GRDB, WAL mode, stored at `~/Library/Application Support/AgentDevPilot/db.sqlite`
+- SQLite via GRDB, WAL mode, stored at `~/Library/Application Support/AgentPilot/db.sqlite`
 - Migrations: `v1_initial` → `v2_dismissed` → `v3_session_cwd` → `v4_session_terminal` (`tty`/`terminal_app`) → `v5_session_status` (renames `running`→`idle`, `error`→`completed`) → `v6_event_types` (renames `taskStarted`→`promptSubmitted`, `taskCompleted/taskError`→`agentStopped`) → `v7_session_custom_name` → `v8_hook_logs` (creates `hook_logs` debug table)
 - Tests use in-memory DB via `DatabaseManager.openInMemoryDatabase()`
 - `ValueObservation` closures must always read every table they need to track — an early-return guard that skips a table read will cause that table to be unregistered from the observation
 
 ### Auth
 
-Token at `~/.agent-dev-pilot/token` (0600 permissions). `notify.sh` reads this token and sends it as `Authorization: Bearer <token>`. The same token is loaded by `AppState.start()` via `AuthTokenService.ensureToken()`.
+Token at `~/.agentpilot/token` (0600 permissions). `notify.sh` reads this token and sends it as `Authorization: Bearer <token>`. The same token is loaded by `AppState.start()` via `AuthTokenService.ensureToken()`.
 
 ### Session state machine
 
@@ -162,13 +162,13 @@ State transitions computed by `SessionStateReducer.reduce()`, executed by `HookS
 
 ### notify.sh
 
-Script content is embedded in `HookInstaller.scriptContent` (the canonical source of truth — not in `Resources/`). `HookInstaller.installScript()` writes it to `~/.agent-dev-pilot/hooks/notify.sh` (0755), skipping the write if content is unchanged. Fire-and-forget — uses `&` so it never blocks Claude Code. Enforces 64KB payload limit via `head -c 65536`. If the app is not running, events are silently dropped.
+Script content is embedded in `HookInstaller.scriptContent` (the canonical source of truth — not in `Resources/`). `HookInstaller.installScript()` writes it to `~/.agentpilot/hooks/notify.sh` (0755), skipping the write if content is unchanged. Fire-and-forget — uses `&` so it never blocks Claude Code. Enforces 64KB payload limit via `head -c 65536`. If the app is not running, events are silently dropped.
 
 Claude Code hooks registered: `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `Notification`. Use `HookInstaller.claudeCodePrompt()` to generate the settings.json merge prompt.
 
 ### cursor-notify.sh
 
-Script content is embedded in `HookInstaller.cursorScriptContent`. `HookInstaller.installCursorScript()` writes it to `~/.agent-dev-pilot/hooks/cursor-notify.sh` (0755). Posts to `/cursor-event` endpoint. Respects `$AGENT_DEV_PILOT_PORT` env var (defaults to 9876). Fire-and-forget — never blocks Cursor.
+Script content is embedded in `HookInstaller.cursorScriptContent`. `HookInstaller.installCursorScript()` writes it to `~/.agentpilot/hooks/cursor-notify.sh` (0755). Posts to `/cursor-event` endpoint. Respects `$AGENT_PILOT_PORT` env var (defaults to 9876). Fire-and-forget — never blocks Cursor.
 
 Cursor hooks registered: `sessionStart`, `sessionEnd`, `stop`. Use `HookInstaller.cursorAgentPrompt()` to generate a prompt the user pastes into Cursor Agent, which merges hooks into `~/.cursor/hooks.json`.
 

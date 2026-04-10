@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import AgentDevPilot
+@testable import AgentPilot
 
 // Tests for the pure-function helpers that drive position persistence.
 // FloatWindowController.isPositionVisible and displayKey are nonisolated static

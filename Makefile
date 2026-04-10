@@ -1,4 +1,4 @@
-APP_NAME    = AgentDevPilot
+APP_NAME    = AgentPilot
 BUILD_DIR   = .build/debug
 RELEASE_DIR = .build/release
 APP_BUNDLE  = $(APP_NAME).app

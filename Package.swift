@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "AgentDevPilot",
+    name: "AgentPilot",
     platforms: [
         .macOS(.v14)
     ],
@@ -31,7 +31,7 @@ let package = Package(
         ),
         // Main executable
         .executableTarget(
-            name: "AgentDevPilot",
+            name: "AgentPilot",
             dependencies: [
                 "Core",
                 "Server",
@@ -51,10 +51,10 @@ let package = Package(
         ),
         // Tests for core functionality
         .testTarget(
-            name: "AgentDevPilotTests",
+            name: "AgentPilotTests",
             dependencies: [
                 "Core",
-                "AgentDevPilot",
+                "AgentPilot",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Tests",

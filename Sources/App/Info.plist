@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.agentdevpilot.app</string>
+    <string>com.agentpilot.app</string>
     <key>CFBundleName</key>
-    <string>Agent Dev Pilot</string>
+    <string>Agent Pilot</string>
     <key>CFBundleDisplayName</key>
-    <string>Agent Dev Pilot</string>
+    <string>Agent Pilot</string>
     <key>CFBundleExecutable</key>
-    <string>AgentDevPilot</string>
+    <string>AgentPilot</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
@@ -19,7 +19,7 @@
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Agent Dev Pilot needs to control Ghostty to focus the terminal window for your active Claude Code session.</string>
+    <string>Agent Pilot needs to control Ghostty to focus the terminal window for your active Claude Code session.</string>
     <key>LSUIElement</key>
     <true/>
     <key>CFBundleIconFile</key>
