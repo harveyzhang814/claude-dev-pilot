@@ -205,4 +205,82 @@ public enum HookInstaller {
         - Do not modify any other keys in settings.json.
         """
     }
+
+    // MARK: - Legacy cleanup
+
+    /// Removes hook entries that reference the old `~/.agent-dev-pilot/` paths from
+    /// ~/.claude/settings.json and ~/.cursor/hooks.json.
+    /// Called once during migration; safe to call repeatedly (no-ops if already clean).
+    public static func removeOldHookEntries() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let oldPrefix = home.appendingPathComponent(".agent-dev-pilot/hooks").path
+
+        removeOldClaudeCodeHooks(oldPrefix: oldPrefix)
+        removeOldCursorHooks(oldPrefix: oldPrefix)
+    }
+
+    private static func removeOldClaudeCodeHooks(oldPrefix: String) {
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/settings.json").path
+        guard let data = FileManager.default.contents(atPath: path),
+              var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var hooksMap = root["hooks"] as? [String: Any] else { return }
+
+        var changed = false
+        for (eventName, value) in hooksMap {
+            guard var matchers = value as? [[String: Any]] else { continue }
+            var matcherChanged = false
+            for i in matchers.indices {
+                guard var hooks = matchers[i]["hooks"] as? [[String: Any]] else { continue }
+                let filtered = hooks.filter { hook in
+                    guard let cmd = hook["command"] as? String else { return true }
+                    return !cmd.hasPrefix(oldPrefix)
+                }
+                if filtered.count != hooks.count {
+                    matchers[i]["hooks"] = filtered
+                    matcherChanged = true
+                }
+            }
+            // Drop matchers whose hook list is now empty
+            let filteredMatchers = matchers.filter { m in
+                guard let hooks = m["hooks"] as? [[String: Any]] else { return true }
+                return !hooks.isEmpty
+            }
+            if matcherChanged || filteredMatchers.count != matchers.count {
+                hooksMap[eventName] = filteredMatchers
+                changed = true
+            }
+        }
+
+        guard changed else { return }
+        root["hooks"] = hooksMap
+        guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else { return }
+        try? out.write(to: URL(fileURLWithPath: path))
+    }
+
+    private static func removeOldCursorHooks(oldPrefix: String) {
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cursor/hooks.json").path
+        guard let data = FileManager.default.contents(atPath: path),
+              var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var hooksMap = root["hooks"] as? [String: Any] else { return }
+
+        var changed = false
+        for (eventName, value) in hooksMap {
+            guard let entries = value as? [[String: Any]] else { continue }
+            let filtered = entries.filter { entry in
+                guard let cmd = entry["command"] as? String else { return true }
+                return !cmd.hasPrefix(oldPrefix)
+            }
+            if filtered.count != entries.count {
+                hooksMap[eventName] = filtered
+                changed = true
+            }
+        }
+
+        guard changed else { return }
+        root["hooks"] = hooksMap
+        guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else { return }
+        try? out.write(to: URL(fileURLWithPath: path))
+    }
 }
