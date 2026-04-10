@@ -15,6 +15,8 @@ struct SettingsView: View {
     @State private var recentPayloads: [String] = []
     @State private var promptCopied: Bool = false
     @State private var cursorPromptCopied: Bool = false
+    @State private var removePromptCopied: Bool = false
+    @State private var cursorRemovePromptCopied: Bool = false
 
     var body: some View {
         Form {
@@ -93,6 +95,36 @@ struct SettingsView: View {
                     } label: {
                         Label(promptCopied ? "Copied!" : "Copy Prompt", systemImage: promptCopied ? "checkmark" : "doc.on.doc")
                     }
+
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    Text("To remove these hooks, paste this into any Claude Code session:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ScrollView {
+                        Text(HookInstaller.claudeCodeRemovePrompt())
+                            .font(.system(.caption2, design: .monospaced))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 100)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(6)
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(HookInstaller.claudeCodeRemovePrompt(), forType: .string)
+                        removePromptCopied = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            removePromptCopied = false
+                        }
+                    } label: {
+                        Label(removePromptCopied ? "Copied!" : "Copy Remove Prompt", systemImage: removePromptCopied ? "checkmark" : "doc.on.doc")
+                    }
                 }
             }
 
@@ -124,6 +156,36 @@ struct SettingsView: View {
                         }
                     } label: {
                         Label(cursorPromptCopied ? "Copied!" : "Copy Prompt", systemImage: cursorPromptCopied ? "checkmark" : "doc.on.doc")
+                    }
+
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    Text("To remove these hooks, paste this into Cursor Agent:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ScrollView {
+                        Text(HookInstaller.cursorAgentRemovePrompt())
+                            .font(.system(.caption2, design: .monospaced))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 100)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(6)
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(HookInstaller.cursorAgentRemovePrompt(), forType: .string)
+                        cursorRemovePromptCopied = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            cursorRemovePromptCopied = false
+                        }
+                    } label: {
+                        Label(cursorRemovePromptCopied ? "Copied!" : "Copy Remove Prompt", systemImage: cursorRemovePromptCopied ? "checkmark" : "doc.on.doc")
                     }
                 }
             }
