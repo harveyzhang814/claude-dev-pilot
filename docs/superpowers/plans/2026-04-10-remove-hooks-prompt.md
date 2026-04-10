@@ -21,7 +21,7 @@ In `HookInstaller.swift`, after the closing `}` of `claudeCodePrompt()` (line 20
 
 ```swift
 /// Returns a prompt the user can paste into Claude Code to remove all Agent Pilot hooks.
-/// Only removes entries whose command is `~/.agentpilot/hooks/notify.sh`.
+/// Only removes entries whose command is `~/.agent-dev-pilot/hooks/notify.sh`.
 /// Does not modify any other hooks or settings.json keys.
 public static func claudeCodeRemovePrompt() -> String {
     """
@@ -29,8 +29,8 @@ public static func claudeCodeRemovePrompt() -> String {
     settings (~/.claude/settings.json).
 
     Remove any hook entry whose "command" value is \
-    "~/.agentpilot/hooks/notify.sh" (including tilde-expanded \
-    variants such as "/Users/<username>/.agentpilot/hooks/notify.sh").
+    "~/.agent-dev-pilot/hooks/notify.sh" (including tilde-expanded \
+    variants such as "/Users/<username>/.agent-dev-pilot/hooks/notify.sh").
 
     This applies to all hook event keys: SessionStart, SessionEnd, \
     UserPromptSubmit, PreToolUse, PostToolUse, Stop, Notification — \
@@ -54,7 +54,7 @@ In `HookInstaller.swift`, after the closing `}` of `cursorAgentPrompt()` (around
 
 ```swift
 /// Returns a prompt the user can paste into Cursor Agent to remove all Agent Pilot hooks.
-/// Only removes entries whose command is `~/.agentpilot/hooks/cursor-notify.sh`.
+/// Only removes entries whose command is `~/.agent-dev-pilot/hooks/cursor-notify.sh`.
 /// Does not modify any other hooks or hooks.json keys.
 public static func cursorAgentRemovePrompt() -> String {
     """
@@ -62,8 +62,8 @@ public static func cursorAgentRemovePrompt() -> String {
     configuration (~/.cursor/hooks.json).
 
     Remove any hook entry whose "command" value is \
-    "~/.agentpilot/hooks/cursor-notify.sh" (including tilde-expanded \
-    variants such as "/Users/<username>/.agentpilot/hooks/cursor-notify.sh").
+    "~/.agent-dev-pilot/hooks/cursor-notify.sh" (including tilde-expanded \
+    variants such as "/Users/<username>/.agent-dev-pilot/hooks/cursor-notify.sh").
 
     This applies to all hook event keys: sessionStart, sessionEnd, stop — \
     and any others that may reference the same command.
