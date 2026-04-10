@@ -138,6 +138,30 @@ public enum HookInstaller {
         """
     }
 
+    /// Returns a prompt the user can paste into Cursor Agent to remove all Agent Pilot hooks.
+    /// Only removes entries whose command is `~/.agentpilot/hooks/cursor-notify.sh`.
+    /// Does not modify any other hooks or hooks.json keys.
+    public static func cursorAgentRemovePrompt() -> String {
+        """
+        Please remove all Agent Pilot hooks from my Cursor hooks \
+        configuration (~/.cursor/hooks.json).
+
+        Remove any hook entry whose "command" value is \
+        "~/.agentpilot/hooks/cursor-notify.sh" (including tilde-expanded \
+        variants such as "/Users/<username>/.agentpilot/hooks/cursor-notify.sh").
+
+        This applies to all hook event keys: sessionStart, sessionEnd, stop — \
+        and any others that may reference the same command.
+
+        Rules:
+        - Remove only entries whose command matches the path above.
+        - If removing entries leaves a hook event key's array empty, \
+        remove that hook event key entirely.
+        - Preserve all other hooks and hooks.json keys exactly as-is.
+        - Do not modify any other keys in hooks.json.
+        """
+    }
+
     // MARK: - Claude Code prompt
 
     /// Returns a prompt the user can paste into Claude Code.
@@ -202,6 +226,33 @@ public enum HookInstaller {
         Rules:
         - Only add entries that do not already exist.
         - Preserve all existing hooks and permissions exactly as-is.
+        - Do not modify any other keys in settings.json.
+        """
+    }
+
+    /// Returns a prompt the user can paste into Claude Code to remove all Agent Pilot hooks.
+    /// Only removes entries whose command is `~/.agentpilot/hooks/notify.sh`.
+    /// Does not modify any other hooks or settings.json keys.
+    public static func claudeCodeRemovePrompt() -> String {
+        """
+        Please remove all Agent Pilot hooks from my Claude Code \
+        settings (~/.claude/settings.json).
+
+        Remove any hook entry whose "command" value is \
+        "~/.agentpilot/hooks/notify.sh" (including tilde-expanded \
+        variants such as "/Users/<username>/.agentpilot/hooks/notify.sh").
+
+        This applies to all hook event keys: SessionStart, SessionEnd, \
+        UserPromptSubmit, PreToolUse, PostToolUse, Stop, Notification — \
+        and any others that may reference the same command.
+
+        Rules:
+        - Remove only entries whose command matches the path above.
+        - If removing entries leaves a matcher group's "hooks" array empty, \
+        remove that matcher group object entirely.
+        - If removing matcher groups leaves a hook event key's array empty, \
+        remove that hook event key entirely.
+        - Preserve all other hooks and settings.json keys exactly as-is.
         - Do not modify any other keys in settings.json.
         """
     }
