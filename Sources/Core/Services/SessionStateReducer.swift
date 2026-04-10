@@ -40,13 +40,18 @@ public enum SessionStateReducer {
         // Rule 3: UserPromptSubmit → busy + dismiss prior events
         case .userPromptSubmit(_):
             s.status = .busy
-            return (s, [
+            s.stopWindowActive = false
+            var actions: [Action] = [
                 .updateSessionStatus(sessionId: sid, status: .busy),
                 .dismissPriorEvents(sessionId: sid),
                 .insertDevEvent(sessionId: sid, type: .promptSubmitted,
                                 title: "Prompt submitted",
                                 cwd: s.cwd, attentionTier: .background)
-            ])
+            ]
+            if state.stopWindowActive {
+                actions.insert(.cancelStopWindow(sessionId: sid), at: 0)
+            }
+            return (s, actions)
 
         // Rule 4: PreToolUse/AskUserQuestion → waiting (any current state)
         case .preToolUse(_, "AskUserQuestion"):
@@ -84,10 +89,18 @@ public enum SessionStateReducer {
         case .notification(_, .permissionPrompt):
             return (s, [])
 
-        // Rule 8: PostToolUse (any tool) when waiting → busy
+        // Rule 8: PostToolUse (any tool) when waiting → busy.
+        // Also cancels any active stop window: if Stop fired while waiting and then
+        // PostToolUse arrives (user answered the permission dialog), the orphaned
+        // timer must not fire later and incorrectly set the session to .idle.
         case .postToolUse(_, _) where s.status == .waiting:
             s.status = .busy
-            return (s, [.updateSessionStatus(sessionId: sid, status: .busy)])
+            s.stopWindowActive = false
+            var actions: [Action] = [.updateSessionStatus(sessionId: sid, status: .busy)]
+            if state.stopWindowActive {
+                actions.insert(.cancelStopWindow(sessionId: sid), at: 0)
+            }
+            return (s, actions)
 
         // Rule 9: Stop → start 2s coalescing window (status unchanged)
         case .stop(_):
@@ -106,12 +119,19 @@ public enum SessionStateReducer {
                                 cwd: s.cwd, attentionTier: .review)
             ])
 
-        // Rule 11: PreToolUse (non-AskUserQuestion) when idle or waiting → busy
+        // Rule 11: PreToolUse (non-AskUserQuestion) when idle or waiting → busy.
+        // Also cancels any active stop window so an orphaned timer cannot race and
+        // set the session back to .idle after we've correctly exited .waiting or .idle.
         case .preToolUse(_, let toolName)
                 where toolName != "AskUserQuestion"
                    && (s.status == .idle || s.status == .waiting):
             s.status = .busy
-            return (s, [.updateSessionStatus(sessionId: sid, status: .busy)])
+            s.stopWindowActive = false
+            var actions: [Action] = [.updateSessionStatus(sessionId: sid, status: .busy)]
+            if state.stopWindowActive {
+                actions.insert(.cancelStopWindow(sessionId: sid), at: 0)
+            }
+            return (s, actions)
 
         // Rules 12–13: idlePrompt and everything else → no-op
         default:

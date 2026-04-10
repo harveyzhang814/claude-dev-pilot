@@ -378,4 +378,96 @@ struct SessionStateReducerTests {
             sessionId: sid, type: .agentStopped,
             title: "Claude is ready", cwd: nil, attentionTier: .review)))
     }
+
+    // MARK: - Error correction: orphaned stop window cancellation
+
+    /// When PostToolUse correctly exits .waiting→.busy but a stop window is already
+    /// running, the window must be cancelled. Without this, stopWindowExpired fires
+    /// 2 s later and incorrectly sets the session back to .idle.
+    @Test func postToolUseFromWaitingWithStopWindowCancelsWindow() {
+        var state = SessionMachineState.initial
+        state.status = .waiting
+        state.stopWindowActive = true
+
+        let (next, actions) = reduce(state, .postToolUse(sessionId: sid, toolName: "AskUserQuestion"))
+        #expect(next.status == .busy)
+        #expect(next.stopWindowActive == false)
+        #expect(actions.contains(.cancelStopWindow(sessionId: sid)))
+        #expect(actions.contains(.updateSessionStatus(sessionId: sid, status: .busy)))
+    }
+
+    /// PreToolUse (non-AQU) from .waiting with an active stop window: must cancel
+    /// the window so the orphaned timer cannot prematurely set the session to .idle.
+    @Test func preToolUseFromWaitingWithStopWindowCancelsWindow() {
+        var state = SessionMachineState.initial
+        state.status = .waiting
+        state.stopWindowActive = true
+
+        let (next, actions) = reduce(state, .preToolUse(sessionId: sid, toolName: "Bash"))
+        #expect(next.status == .busy)
+        #expect(next.stopWindowActive == false)
+        #expect(actions.contains(.cancelStopWindow(sessionId: sid)))
+        #expect(actions.contains(.updateSessionStatus(sessionId: sid, status: .busy)))
+    }
+
+    /// PreToolUse (non-AQU) from .idle with an active stop window: same correction.
+    @Test func preToolUseFromIdleWithStopWindowCancelsWindow() {
+        var state = SessionMachineState.initial
+        state.status = .idle
+        state.stopWindowActive = true
+
+        let (next, actions) = reduce(state, .preToolUse(sessionId: sid, toolName: "Read"))
+        #expect(next.status == .busy)
+        #expect(next.stopWindowActive == false)
+        #expect(actions.contains(.cancelStopWindow(sessionId: sid)))
+    }
+
+    /// UserPromptSubmit while a stop window is active must cancel the window.
+    /// Without this, the new prompt starts executing but stopWindowExpired fires 2 s
+    /// later and flips the session back to .idle.
+    @Test func userPromptSubmitWithStopWindowCancelsWindow() {
+        var state = SessionMachineState.initial
+        state.status = .busy
+        state.stopWindowActive = true
+
+        let (next, actions) = reduce(state, .userPromptSubmit(sessionId: sid))
+        #expect(next.status == .busy)
+        #expect(next.stopWindowActive == false)
+        #expect(actions.contains(.cancelStopWindow(sessionId: sid)))
+        #expect(actions.contains(.updateSessionStatus(sessionId: sid, status: .busy)))
+    }
+
+    /// Full path: session stuck in .waiting + stop window, then tool activity arrives.
+    /// Verifies the complete self-correction chain: .waiting → (stop) → (PreToolUse) → .busy
+    /// with no orphaned stop window.
+    @Test func waitingWithStopWindowSelfCorrectsOnToolActivity() {
+        var state = SessionMachineState.initial
+        state.cwd = "/proj"
+        var actions: [Action]
+
+        // Session goes busy
+        (state, _) = reduce(state, .userPromptSubmit(sessionId: sid))
+        #expect(state.status == .busy)
+
+        // Permission prompt falsely sets waiting
+        (state, _) = reduce(state, .notification(sessionId: sid, kind: .permissionPrompt))
+        #expect(state.status == .waiting)
+
+        // Agent loop exits — stop window starts
+        (state, _) = reduce(state, .stop(sessionId: sid))
+        #expect(state.stopWindowActive == true)
+        #expect(state.status == .waiting)
+
+        // Agent resumes: PreToolUse arrives during the stop window.
+        // Must transition to .busy AND cancel the window.
+        (state, actions) = reduce(state, .preToolUse(sessionId: sid, toolName: "Bash"))
+        #expect(state.status == .busy)
+        #expect(state.stopWindowActive == false)
+        #expect(actions.contains(.cancelStopWindow(sessionId: sid)))
+
+        // Subsequent stop → window → idle flows normally
+        (state, _) = reduce(state, .stop(sessionId: sid))
+        (state, actions) = reduce(state, .stopWindowExpired(sessionId: sid))
+        #expect(state.status == .idle)
+    }
 }
