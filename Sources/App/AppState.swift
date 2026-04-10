@@ -43,9 +43,6 @@ public final class AppState {
     public init() {}
 
     public func start() async {
-        // Migrate data from old "Agent Dev Pilot" paths to new "Agent Pilot" paths
-        migrateFromLegacyPaths()
-
         // Set up database
         do {
             let dbPool = try DatabaseManager.openDatabase(at: DatabaseManager.defaultDatabasePath)
@@ -224,31 +221,4 @@ public final class AppState {
         floatWindowController?.reveal()
     }
 
-    // MARK: - Legacy migration
-
-    /// Migrates data from the old "Agent Dev Pilot" paths to the new "Agent Pilot" paths.
-    /// Runs once; subsequent calls are no-ops because the old directories will be absent.
-    private func migrateFromLegacyPaths() {
-        let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser
-
-        // ~/.agent-dev-pilot → ~/.agentpilot
-        let oldDotDir = home.appendingPathComponent(".agent-dev-pilot")
-        let newDotDir = home.appendingPathComponent(".agentpilot")
-        if fm.fileExists(atPath: oldDotDir.path) && !fm.fileExists(atPath: newDotDir.path) {
-            try? fm.moveItem(at: oldDotDir, to: newDotDir)
-        }
-
-        // Always clean up stale hook entries (idempotent — no-ops if already clean)
-        HookInstaller.removeOldHookEntries()
-
-        // ~/Library/Application Support/AgentDevPilot → AgentPilot
-        if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            let oldAppDir = appSupport.appendingPathComponent("AgentDevPilot")
-            let newAppDir = appSupport.appendingPathComponent("AgentPilot")
-            if fm.fileExists(atPath: oldAppDir.path) && !fm.fileExists(atPath: newAppDir.path) {
-                try? fm.moveItem(at: oldAppDir, to: newAppDir)
-            }
-        }
-    }
 }
