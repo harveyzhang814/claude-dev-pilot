@@ -26,13 +26,13 @@ fi
 
 if [ "$BRANCH" = "staging" ]; then
     if [ "$IS_MERGE" -eq 0 ]; then
-        echo "❌ 禁止直接在 staging 上提交。请在 feature/*, fix/*, chore/*, doc/* 分支开发后合并。"
+        echo "❌ 禁止直接在 staging 上提交。请在 feat/*, feature/*, fix/*, chore/*, doc/* 分支开发后合并。"
         exit 1
     fi
     SRC=$(merge_source_branch)
     case "$SRC" in
-        feature/*|fix/*|chore/*|doc/*) exit 0 ;;
-        *) echo "❌ staging 只接受来自 feature/*, fix/*, chore/*, doc/* 的合并，当前来源：'${SRC:-unknown}'"; exit 1 ;;
+        feat/*|feature/*|fix/*|chore/*|doc/*) exit 0 ;;
+        *) echo "❌ staging 只接受来自 feat/*, feature/*, fix/*, chore/*, doc/* 的合并，当前来源：'${SRC:-unknown}'"; exit 1 ;;
     esac
 fi
 
