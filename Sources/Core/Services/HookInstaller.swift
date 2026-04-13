@@ -256,5 +256,4 @@ public enum HookInstaller {
         - Do not modify any other keys in settings.json.
         """
     }
-
 }
