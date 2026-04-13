@@ -3,6 +3,7 @@ import Core
 
 struct MenubarPopover: View {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     let viewModel: PopoverViewModel
     var onFocusSession: ((DevSession) -> Void)?
 
@@ -63,6 +64,16 @@ struct MenubarPopover: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.accentColor)
                 .help("Session Panel")
+
+                Button {
+                    openSettings()
+                } label: {
+                    Image(systemName: "gear")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .help("Settings")
 
                 Spacer()
 

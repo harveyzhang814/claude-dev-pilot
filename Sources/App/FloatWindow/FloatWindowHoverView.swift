@@ -9,6 +9,9 @@ struct FloatWindowHoverView: View {
     let isLocked: Bool
     let onToggleLock: () -> Void
 
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
+
     /// Non-stale before stale. Within active sessions: group by cwd (newest cwd
     /// first), then claude-code before cursor within the same cwd.
     private var sortedSessions: [DevSession] {
@@ -43,7 +46,19 @@ struct FloatWindowHoverView: View {
             // Toolbar
             HStack(spacing: 0) {
                 Button {
-                    // No action yet
+                    openWindow(id: "session-panel")
+                } label: {
+                    Image(systemName: "sidebar.right")
+                        .foregroundColor(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .cornerRadius(3)
+                .help("Session Panel")
+
+                Button {
+                    openSettings()
                 } label: {
                     Image(systemName: "gear")
                         .foregroundColor(.secondary)
@@ -51,8 +66,10 @@ struct FloatWindowHoverView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .background(Color.clear)
                 .cornerRadius(3)
+                .help("Settings")
+
+                Spacer()
 
                 Button {
                     onToggleLock()
@@ -63,10 +80,8 @@ struct FloatWindowHoverView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .background(Color.clear)
                 .cornerRadius(3)
-
-                Spacer()
+                .help(isLocked ? "Unlock" : "Lock")
 
                 Button {
                     onExpand()
@@ -77,8 +92,20 @@ struct FloatWindowHoverView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .background(Color.clear)
                 .cornerRadius(3)
+                .help("Expand")
+
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Image(systemName: "power")
+                        .foregroundColor(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .cornerRadius(3)
+                .help("Quit")
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
