@@ -1,40 +1,48 @@
 # Session File Reader — Experiment Design
 
 **Date:** 2026-04-14  
-**Type:** Experimental (isolated worktree branch)  
-**Status:** Design approved, pending implementation
+**Type:** Experimental (isolated worktree branch: `exp/session-file-reader`)  
+**Status:** Design approved, pending plan
+
+---
+
+## What This Is
+
+An experiment conducted **by Claude**, using its native tools (Bash, Read, Grep) to directly read and analyze Claude Code's local session files. Claude is the researcher, not a script runner.
+
+The output is a **written findings report** (`docs/superpowers/experiments/session-file-reader-findings.md`) that Claude produces after completing the investigation.
 
 ---
 
 ## Context
 
-Agent Pilot currently relies entirely on Claude Code hooks (`notify.sh`) to receive session events. Hooks must be explicitly installed by the user and require the app to be running when events fire.
+Agent Pilot currently relies entirely on Claude Code hooks (`notify.sh`) to receive session events. Hooks must be explicitly installed by the user.
 
-This experiment explores an alternative signal source: Claude Code's local session files at `~/.claude/projects/<project-path>/<uuid>.jsonl`. Every Claude Code session writes a structured JSONL log regardless of hook configuration.
+This experiment explores an alternative: Claude Code writes a structured JSONL log for every session at `~/.claude/projects/<project-path>/<uuid>.jsonl`, regardless of hook configuration. Can this file be used to determine session state without hooks?
 
 ---
 
 ## Experiment Goal A: Feasibility
 
-**Question:** Without any hooks installed, can we accurately determine whether a Claude Code session is active — purely by reading session files?
+**Question:** Without any hooks installed, can session files alone tell us whether a Claude Code session is active?
 
 **Success criteria:**
-1. Enumerate all sessions across all projects under `~/.claude/projects/`
-2. Classify each session as `active`, `idle`, or `completed`
-3. Classification is consistent with what the JSONL content itself reveals (cross-validated against `hookEvent` entries already in the file)
+1. Can we enumerate all sessions across all projects?
+2. Can we classify each session's state (active / idle / completed)?
+3. Does that classification agree with the evidence inside the files (hookEvent entries, message timestamps)?
 
-**Out of scope for this experiment:**
+**Out of scope:**
 - Accuracy parity with the full hook pipeline (Goal B — future)
-- Extracting conversation summaries via LLM (Goal C — future TODO)
-- Latency comparison between polling and FSEvents (Goal D — future)
+- LLM conversation summarization (Goal C — future TODO)
+- Latency / polling comparison (Goal D — future)
 
 ---
 
-## Session File Structure
+## Session File Structure (already confirmed)
 
 Location: `~/.claude/projects/<encoded-project-path>/<session-uuid>.jsonl`
 
-Each line is a JSON object with a common envelope:
+Each line is a JSON object:
 
 ```json
 {
@@ -42,121 +50,98 @@ Each line is a JSON object with a common envelope:
   "timestamp": "2026-04-13T03:09:01.445Z",
   "sessionId": "06333507-...",
   "cwd": "/Users/.../project",
-  "uuid": "...",
   ...
 }
 ```
 
-Relevant entry types:
+Key entry types:
 
-| type | Meaning |
+| type | Content |
 |------|---------|
-| `progress` | Hook event fired (has `data.hookEvent`: SessionStart, Stop, PostToolUse, etc.) |
-| `user` | User message or tool result returned to model |
-| `assistant` | Model response, may contain tool calls |
+| `progress` | Hook event: `data.hookEvent` = SessionStart / Stop / PostToolUse / etc. |
+| `user` | User message (string) or tool results |
+| `assistant` | Model response + tool calls |
 
 ---
 
-## Classification Logic
+## Experiment Protocol
 
-Session status derived from JSONL content:
+Claude executes these steps using Bash, Glob, and Read tools. No Python script required — all analysis is done in-context.
 
-| Signal | Inferred status |
-|--------|----------------|
-| Last entry `timestamp` < 30 min ago AND last `type=user` was a plain string prompt | `active/busy` |
-| `progress` entry with `hookEvent=Stop` is the last meaningful event | `idle` |
-| `progress` entry with `hookEvent=SessionEnd` present | `completed` |
-| Last entry `timestamp` > 30 min ago | `idle` (stale) |
-| File mtime < 30s ago | `active` (fast path, no JSONL parse needed) |
+### Step 1 — Enumerate sessions
 
-Status priority: `completed` > `active` (recent mtime) > content-derived.
-
----
-
-## Script Design
-
-Single file: `scripts/experiments/session_reader.py`
-
-**Usage:**
 ```bash
-python3 scripts/experiments/session_reader.py
+find ~/.claude/projects/ -name "*.jsonl" | sort
 ```
 
-No arguments. Runs the full experiment autonomously and exits. No human intervention required.
+Record: total count, project distribution, date range of files.
 
-**Execution flow:**
+### Step 2 — Sample and characterize
 
-```
-1. discover_sessions()       — find all .jsonl files under ~/.claude/projects/
-2. for each session:
-     parse_session(path)     — read all lines, extract envelope fields
-     compute_status(events)  — apply classification logic above
-3. print_status_table()      — sorted by last_active desc
-4. print_summary()           — total / active / idle / completed counts
-5. print_validation_report() — cross-check: does computed status match hookEvent signals in file?
-6. print_todo()              — next steps for Goal B and Goal D
-```
+Pick a representative sample (≥5 sessions across different projects and ages). For each:
+- File mtime (filesystem)
+- First and last `timestamp` in file
+- Entry type distribution (`type` field counts)
+- Which `hookEvent` values appear in `progress` entries
 
-**Output format** — stdout only, human-readable table + JSON summary at end:
+### Step 3 — Classify each sampled session
 
-```
-SESSION ID     PROJECT              STATUS     LAST_ACTIVE           AGE
-06333507...    agent-dev-pilot      completed  2026-04-13 11:16:25   1d ago
-2bbce87c...    agent-dev-pilot      idle       2026-04-14 09:32:11   2h ago
+Apply this logic and record the result:
 
-SUMMARY
-  Total sessions : 88
-  Active         : 0
-  Idle           : 71
-  Completed      : 17
+| Signal | Classification |
+|--------|---------------|
+| File mtime < 2 min ago | `active` (fast path) |
+| Last `hookEvent` = `SessionEnd` | `completed` |
+| Last `hookEvent` = `Stop` and no subsequent `user` message | `idle` |
+| Last `type=user` was a plain string and timestamp < 30 min ago | `busy` |
+| Last timestamp > 30 min ago | `stale` |
 
-VALIDATION
-  Sessions with hookEvent data     : 45
-  Status matches hookEvent signal  : 43 / 45  (95.6%)
-  Mismatches                       : 2 (see below)
-  ...
+### Step 4 — Cross-validate
 
-TODO (future experiments)
-  [ ] Goal B: extract permission requests and AskUserQuestion events
-  [ ] Goal D: compare poll latency vs FSEvents latency
-  [ ] Goal C: LLM summarization of conversation content
-```
+For sessions that have both hook signals AND timestamp signals, check whether they agree. Note any contradictions.
 
-**Key functions:**
+### Step 5 — Stress test edge cases
 
-| Function | Signature | Notes |
-|----------|-----------|-------|
-| `discover_sessions` | `() -> list[SessionMeta]` | Walks `~/.claude/projects/`, skips dirs |
-| `parse_session` | `(path: str) -> list[dict]` | Reads all JSONL lines, returns raw entries |
-| `classify_entry` | `(entry: dict) -> str \| None` | Maps one JSONL entry to a signal label |
-| `compute_status` | `(entries: list[dict]) -> SessionStatus` | Applies priority logic to signal list |
-| `format_age` | `(ts: str) -> str` | ISO timestamp → "2h ago" / "3d ago" |
-| `run_experiment` | `() -> None` | Top-level: discover → parse → classify → report |
+Deliberately look for sessions that might be ambiguous or hard to classify:
+- Sessions with no `progress` entries (hooks not installed)
+- Very short sessions (1–2 messages)
+- Sessions that were interrupted mid-task
+
+### Step 6 — Write findings report
+
+Produce `docs/superpowers/experiments/session-file-reader-findings.md` with:
+- What worked well
+- What was ambiguous or unreliable
+- Confidence level: is Goal A feasible? (yes / partial / no)
+- Specific gaps that Goal B would need to fill
+- Recommended next step
 
 ---
 
-## Implementation Notes
+## What Claude Should NOT Do
 
-- Zero external dependencies (stdlib only: `json`, `os`, `pathlib`, `datetime`)
-- Reads files at runtime only — no persistent state, no side effects
-- If a `.jsonl` file is malformed or unreadable, skip and log to stderr
-- Uses file `mtime` as fast-path check before parsing JSONL content
-- Script is idempotent: safe to run multiple times
-
----
-
-## What This Does NOT Do
-
-- Does not write any files or modify any state
-- Does not require Agent Pilot app to be running
-- Does not poll or watch continuously (single-pass snapshot)
-- Does not touch the existing hook pipeline or any Swift code
+- Do not write a Python script and run it — analyze directly
+- Do not read every single `.jsonl` file — sample intelligently
+- Do not try to simulate real-time watching — this is a static snapshot experiment
+- Do not modify any session files
 
 ---
 
-## Future Work
+## Deliverable
 
-- **Goal B:** Extract structured events (permission requests, `AskUserQuestion`, tool call sequences) from JSONL content
-- **Goal D:** Add `--mode poll` and `--mode watch` to compare latency of the two reading approaches
-- **Goal C (TODO):** Feed conversation content to an LLM to generate natural language "what is this session doing" summaries
-- **Integration decision:** If A+B prove accurate, evaluate replacing or supplementing `HookStreamCoordinator` with a `SessionFileWatcher` service in the Swift app
+A single findings report committed to the `exp/session-file-reader` branch:
+
+```
+docs/superpowers/experiments/session-file-reader-findings.md
+```
+
+Format: markdown. Sections: Summary, Methodology, Findings, Confidence Assessment, Next Steps.
+
+---
+
+## Future Work (not part of this experiment)
+
+- **Goal B:** Extract structured events (permission requests, AskUserQuestion) from message content
+- **Goal D:** Real-time watching — poll vs FSEvents latency comparison  
+- **Goal C (TODO):** LLM summarization of conversation content
+- **Integration:** If A proves feasible, design a `SessionFileWatcher` Swift service to complement or replace hooks
