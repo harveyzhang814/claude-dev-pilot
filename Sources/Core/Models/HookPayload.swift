@@ -1,6 +1,6 @@
 import Foundation
 
-public enum EventSource: String, Sendable {
+public enum EventSource: String, Sendable, Equatable, Hashable {
     case hook        // arrived via HTTP (notify.sh / cursor-notify.sh)
     case fileWatcher // derived from JSONL session file monitoring
 }
