@@ -185,13 +185,9 @@ struct ConfigCExperimentTests {
         print("After Stop + window: \(statusIdle ?? "nil")")
         print("After second UserPromptSubmit: \(statusBusy2 ?? "nil")")
         print("Total DevEvents created: \(totalEvents)")
-        print("NOTE: first UserPromptSubmit without SessionStart creates session as idle (known behavior gap)")
-        print("      updateSessionStatus falls back to creating session with status=idle, not busy")
-
-        // OBSERVATION: When no SessionStart precedes UserPromptSubmit, the session is created
-        // as .idle (fallback in updateSessionStatus), not .busy. This is a known gap for
-        // file-watcher-only mode where SessionStart may not be observed.
-        #expect(statusBusy == "idle", "Without SessionStart, session falls back to idle creation")
+        // Fixed: updateSessionStatus now uses the actual status parameter when creating
+        // a fallback session, so UserPromptSubmit correctly creates session as .busy.
+        #expect(statusBusy == "busy", "Without SessionStart, session should still be created as busy")
         #expect(statusIdle == "idle")
         #expect(statusBusy2 == "busy")
     }
