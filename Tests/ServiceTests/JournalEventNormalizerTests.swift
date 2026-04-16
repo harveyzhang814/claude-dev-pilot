@@ -53,7 +53,7 @@ struct JournalEventNormalizerTests {
         ]
         let payload = JournalEventNormalizer.normalize(entry)
         #expect(payload?.hookEventName == "Notification")
-        #expect(payload?.notificationType == "permissionNeeded")
+        #expect(payload?.notificationType == "permission_prompt")
         #expect(payload?.sessionId == "sess-2")
         #expect(payload?.eventSource == .fileWatcher)
     }

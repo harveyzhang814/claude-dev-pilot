@@ -4,6 +4,12 @@ import Foundation
 import GRDB
 @testable import Core
 
+private actor ActorBox<T> {
+    private(set) var value: T
+    init(_ initial: T) { value = initial }
+    func set(_ v: T) { value = v }
+}
+
 /// Config C experiment: both HTTP hooks AND file watcher fire events for the same session.
 /// Observes whether duplicate events cause state corruption or problematic side effects.
 @Suite("ConfigCExperiment")
@@ -276,5 +282,88 @@ struct ConfigCExperimentTests {
 
         #expect(statusAfterFW == "busy")
         #expect(statusAfterHook == "busy")
+    }
+
+    // MARK: - Scenario 6: AskUserQuestion live detection via SessionFileWatcher
+
+    /// Simulates a real session: Claude Code appends an assistant entry with AskUserQuestion
+    /// to a JSONL file. SessionFileWatcher polls the file and should detect the event,
+    /// routing it to the coordinator as Notification/permissionNeeded → session becomes .waiting.
+    @Test("Scenario 6: AskUserQuestion written to JSONL live → detected as waiting")
+    func askUserQuestionLiveDetection() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let sessionId = "exp-sess-6"
+        let (coordinator, db) = try makeCoordinator()
+
+        // Pre-seed session as busy (user submitted a prompt)
+        await coordinator.process(HookPayload(
+            sessionId: sessionId, cwd: "/proj",
+            hookEventName: "SessionStart", eventSource: .hook
+        ))
+        await coordinator.process(HookPayload(
+            sessionId: sessionId, cwd: "/proj",
+            hookEventName: "UserPromptSubmit", eventSource: .hook
+        ))
+        let statusBusy = try await sessionStatus(sessionId, db: db)
+
+        // Write a real AskUserQuestion assistant entry (exact structure from real JSONL files)
+        let file = dir.appendingPathComponent("\(sessionId).jsonl")
+        let askEntry: [String: Any] = [
+            "type": "assistant",
+            "sessionId": sessionId,
+            "cwd": "/proj",
+            "timestamp": "2026-04-16T12:00:00.000Z",
+            "message": [
+                "role": "assistant",
+                "content": [
+                    [
+                        "type": "tool_use",
+                        "id": "toolu_test01",
+                        "name": "AskUserQuestion",
+                        "input": [
+                            "questions": [
+                                ["question": "Which approach?", "header": "Choose", "multiSelect": false,
+                                 "options": [["label": "A"], ["label": "B"]]]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let line = try JSONSerialization.data(withJSONObject: askEntry)
+        var lineData = line
+        lineData.append(0x0A) // newline
+        try lineData.write(to: file)
+
+        // Run SessionFileWatcher for one poll cycle, feeding results into coordinator
+        let detected = ActorBox<HookPayload?>(nil)
+        let watcher = SessionFileWatcher(
+            projectsRoot: dir.path,
+            pollInterval: 0.05,
+            activeWindowSeconds: 1800
+        ) { payload in
+            Task { await detected.set(payload) }
+            Task { await coordinator.process(payload) }
+        }
+        watcher.start()
+        try await Task.sleep(nanoseconds: 200_000_000) // wait 200ms for 1+ polls
+        watcher.stop()
+        let detectedPayload = await detected.value
+
+        let statusWaiting = try await sessionStatus(sessionId, db: db)
+
+        print("--- Scenario 6: AskUserQuestion live detection ---")
+        print("Status before: \(statusBusy ?? "nil")")
+        print("Detected payload: \(detectedPayload?.hookEventName ?? "NONE") / \(detectedPayload?.notificationType ?? "-")")
+        print("Status after file watcher detected AskUserQuestion: \(statusWaiting ?? "nil")")
+
+        #expect(statusBusy == "busy")
+        #expect(detectedPayload?.hookEventName == "Notification")
+        #expect(detectedPayload?.notificationType == "permission_prompt")
+        #expect(statusWaiting == "waiting")
     }
 }

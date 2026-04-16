@@ -42,7 +42,7 @@ public enum JournalEventNormalizer {
                 sessionId: sessionId,
                 cwd: cwd,
                 hookEventName: "Notification",
-                notificationType: "permissionNeeded",
+                notificationType: "permission_prompt",  // matches HookEventClassifier
                 eventSource: .fileWatcher
             )
 
