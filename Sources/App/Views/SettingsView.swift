@@ -195,10 +195,6 @@ struct SettingsView: View {
                 Button("Show Recent Payloads") {
                     showRecentPayloads = true
                 }
-            }
-
-            // Debug section — event source visibility
-            Section("Debug") {
                 HStack {
                     Text("Event Sources")
                     Spacer()
