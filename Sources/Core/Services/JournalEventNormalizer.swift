@@ -47,11 +47,9 @@ public enum JournalEventNormalizer {
             )
 
         case "system":
-            // stop_hook_summary = session stopped (v2.1.92+, fires even with hookCount=0)
-            guard
-                let message = entry["message"] as? [String: Any],
-                message["type"] as? String == "stop_hook_summary"
-            else { return nil }
+            // stop_hook_summary = session stopped (v2.1.92+, fires even with hookCount=0).
+            // The subtype is a top-level field, not nested inside a message dict.
+            guard entry["subtype"] as? String == "stop_hook_summary" else { return nil }
             return HookPayload(
                 sessionId: sessionId,
                 cwd: cwd,

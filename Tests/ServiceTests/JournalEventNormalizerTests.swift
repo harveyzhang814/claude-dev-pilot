@@ -80,12 +80,14 @@ struct JournalEventNormalizerTests {
 
     @Test("system entry with stop_hook_summary subtype → Stop")
     func systemStopHookSummary() {
+        // Real structure: subtype is a top-level field, no message dict
         let entry: [String: Any] = [
             "type": "system",
+            "subtype": "stop_hook_summary",
             "sessionId": "sess-3",
             "cwd": "/tmp/proj",
             "timestamp": "2026-04-16T10:02:00.000Z",
-            "message": ["type": "stop_hook_summary", "hookCount": 0]
+            "hookCount": 0
         ]
         let payload = JournalEventNormalizer.normalize(entry)
         #expect(payload?.hookEventName == "Stop")
@@ -93,14 +95,14 @@ struct JournalEventNormalizerTests {
         #expect(payload?.eventSource == .fileWatcher)
     }
 
-    @Test("system entry with turn_duration subtype → nil")
-    func systemTurnDuration() {
+    @Test("system entry with other subtype → nil")
+    func systemOtherSubtype() {
         let entry: [String: Any] = [
             "type": "system",
+            "subtype": "turn_duration",
             "sessionId": "sess-3",
             "cwd": "/tmp/proj",
-            "timestamp": "2026-04-16T10:02:00.000Z",
-            "message": ["type": "turn_duration", "durationMs": 1234]
+            "timestamp": "2026-04-16T10:02:00.000Z"
         ]
         let payload = JournalEventNormalizer.normalize(entry)
         #expect(payload == nil)

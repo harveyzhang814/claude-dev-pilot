@@ -244,3 +244,50 @@ Zero `UserPromptSubmit` pairs within 2 seconds found in hook_logs over the analy
 ### Conclusion
 
 The file-watcher approach as currently specified is **not viable as a standalone replacement** for HTTP hooks. `Stop` coverage is 37% due to a normalizer bug (wrong field path for `stop_hook_summary` detection), `Notification` coverage is 0% (the signal does not exist in JSONL content), and `SessionEnd` is undetectable. `UserPromptSubmit` is detectable but over-counted by ~48% even with subagent files excluded. For the hybrid model, the file watcher is best scoped as a **UserPromptSubmit fallback only** (to catch sessions where hooks are not installed); all other state-critical events — particularly `Stop` and `Notification` — must continue to come from the HTTP hook source. The `stop_hook_summary` field-path bug in `JournalEventNormalizer.swift` must be fixed before any live experiment run.
+
+---
+
+## Hybrid Experiment Run — 2026-04-16 (Post-Fix)
+
+### Bug Fix Applied
+
+**`JournalEventNormalizer` `system/Stop` detection was wrong.** The normalizer checked `entry["message"]["type"] == "stop_hook_summary"` but the real JSONL structure has `entry["subtype"] == "stop_hook_summary"` at the top level (no `message` dict). Fixed in commit `c94e94b`. Tests updated to match real schema.
+
+### Re-Run Results (Apr 14–15 window, main sessions only, 12 unique sessions)
+
+| Event Type | File Watcher | Hook DB | Coverage |
+|------------|-------------|---------|----------|
+| UserPromptSubmit | 198 | 145 | 137% |
+| Stop | 179 | 129 | 139% |
+| Notification | 1 | 134 | 1% |
+| SessionStart | 16 | 23 | 70% |
+| SessionEnd | 0 | 16 | 0% |
+
+### Interpretation
+
+**Over-counting (UserPromptSubmit 137%, Stop 139%):** The JSONL scan processes the full conversation history on first scan. In live incremental operation (byte-offset tracking), each event fires only once as new content is written. The over-count here reflects historical accumulation across compact/resume cycles, not a live duplication bug.
+
+**Notification 1%:** Confirmed structural gap — `AskUserQuestion` tool_use calls are essentially absent from real JSONL content. The 134 `Notification` events in hook_logs (77 `permission_prompt` + 57 `idle_prompt`) have no JSONL footprint. This is an architectural limitation, not a bug.
+
+**SessionStart 70%:** Only old sessions (pre-v2.1.81) have `progress/hookEvent=SessionStart` entries. Most sessions created with current Claude Code have no `SessionStart` in JSONL.
+
+**SessionEnd 0%:** Architectural — fires after the JSONL file is closed. Undetectable from files.
+
+### Revised Conclusion
+
+With the `stop_hook_summary` bug fixed, the file watcher can detect **both `UserPromptSubmit` and `Stop`** with ~1:1 coverage in live incremental operation — the two most important events for the `busy → idle` state transition. This makes the hybrid model significantly more viable than the pre-fix analysis suggested.
+
+**Remaining gaps:**
+- `Notification` (0%) — required for `waiting` state; hooks-only
+- `SessionEnd` (0%) — required for `completed` state; hooks-only
+
+**Revised verdict for hybrid Config B (file-watcher only, no hooks):**
+- Sessions will correctly cycle `idle → busy → idle`
+- Sessions will never reach `waiting` or `completed` (state machine caps at `idle`)
+- Acceptable for a zero-config baseline that still shows active/idle state
+
+**Revised verdict for hybrid Config C (both sources):**
+- `UserPromptSubmit` and `Stop` may fire twice in quick succession (once from each source)
+- The Reducer's idempotent window handling absorbs `Stop` duplicates (stop window re-entry is safe)
+- `UserPromptSubmit` double-dismiss requires validation: run a 2s duplicate query after live experiment
+
