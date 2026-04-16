@@ -125,6 +125,12 @@ public enum DatabaseManager {
             }
         }
 
+        migrator.registerMigration("v10_hook_log_event_source") { db in
+            try db.alter(table: "hook_logs") { t in
+                t.add(column: "event_source", .text)
+            }
+        }
+
         try migrator.migrate(db)
     }
 

@@ -1,5 +1,10 @@
 import Foundation
 
+public enum EventSource: String, Sendable, Equatable, Hashable {
+    case hook        // arrived via HTTP (notify.sh / cursor-notify.sh)
+    case fileWatcher // derived from JSONL session file monitoring
+}
+
 /// Raw JSON payload from Claude Code hooks (stdin).
 /// Uses snake_case CodingKeys to match the wire format.
 public struct HookPayload: Codable, Sendable {
@@ -17,6 +22,8 @@ public struct HookPayload: Codable, Sendable {
     public let terminalApp: String?   // e.g. "ghostty", "Apple_Terminal"
     public let tool: String?          // nil = "claude-code" (default); "cursor" injected by CursorNormalizer
     public let toolName: String?          // PreToolUse/PostToolUse: e.g. "AskUserQuestion", "Bash"
+    /// Not part of the JSON wire format. Set programmatically to track event origin.
+    public let eventSource: EventSource
 
     public enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -51,6 +58,7 @@ public struct HookPayload: Codable, Sendable {
         terminalApp = try c.decodeIfPresent(String.self, forKey: .terminalApp)
         tool = try c.decodeIfPresent(String.self, forKey: .tool)
         toolName = try c.decodeIfPresent(String.self, forKey: .toolName)
+        eventSource = .hook
     }
 
     public init(
@@ -67,7 +75,8 @@ public struct HookPayload: Codable, Sendable {
         tty: String? = nil,
         terminalApp: String? = nil,
         tool: String? = nil,
-        toolName: String? = nil
+        toolName: String? = nil,
+        eventSource: EventSource = .hook
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -83,5 +92,6 @@ public struct HookPayload: Codable, Sendable {
         self.terminalApp = terminalApp
         self.tool = tool
         self.toolName = toolName
+        self.eventSource = eventSource
     }
 }

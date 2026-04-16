@@ -123,7 +123,7 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
 ### Database
 
 - SQLite via GRDB, WAL mode, stored at `~/Library/Application Support/AgentPilot/db.sqlite`
-- Migrations: `v1_initial` → `v2_dismissed` → `v3_session_cwd` → `v4_session_terminal` (`tty`/`terminal_app`) → `v5_session_status` (renames `running`→`idle`, `error`→`completed`) → `v6_event_types` (renames `taskStarted`→`promptSubmitted`, `taskCompleted/taskError`→`agentStopped`) → `v7_session_custom_name` → `v8_hook_logs` (creates `hook_logs` debug table)
+- Migrations: `v1_initial` → `v2_dismissed` → `v3_session_cwd` → `v4_session_terminal` (`tty`/`terminal_app`) → `v5_session_status` (renames `running`→`idle`, `error`→`completed`) → `v6_event_types` (renames `taskStarted`→`promptSubmitted`, `taskCompleted/taskError`→`agentStopped`) → `v7_session_custom_name` → `v8_hook_logs` (creates `hook_logs` debug table) → `v9_hook_log_endpoint` (adds `endpoint` column) → `v10_hook_log_event_source` (adds `event_source` column)
 - Tests use in-memory DB via `DatabaseManager.openInMemoryDatabase()`
 - `ValueObservation` closures must always read every table they need to track — an early-return guard that skips a table read will cause that table to be unregistered from the observation
 
