@@ -349,9 +349,9 @@ struct ConfigCExperimentTests {
             Task { await detected.set(payload) }
             Task { await coordinator.process(payload) }
         }
-        watcher.start()
+        await watcher.start()
         try await Task.sleep(nanoseconds: 200_000_000) // wait 200ms for 1+ polls
-        watcher.stop()
+        await watcher.stop()
         let detectedPayload = await detected.value
 
         let statusWaiting = try await sessionStatus(sessionId, db: db)

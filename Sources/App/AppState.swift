@@ -27,7 +27,7 @@ public final class AppState {
 
     /// Which event sources have produced at least one payload this session.
     /// Read by SettingsView for debug display.
-    private(set) var activeEventSources: Set<String> = []
+    private(set) var activeEventSources: Set<EventSource> = []
 
     // State
     var serverRunning: Bool = false
@@ -104,14 +104,14 @@ public final class AppState {
             setFloatWindowMode(true)
         }
 
+        // Start HTTP server first so coordinator is ready before file watcher begins polling
+        await startServer()
+
         // Start file watcher (enabled by default; can be disabled via UserDefaults "fileWatcherEnabled")
         let fileWatcherEnabled = UserDefaults.standard.object(forKey: "fileWatcherEnabled") as? Bool ?? true
         if fileWatcherEnabled {
             startFileWatcher()
         }
-
-        // Start HTTP server
-        await startServer()
     }
 
     private func startServer() async {
@@ -151,7 +151,7 @@ public final class AppState {
                         batcher?.submit(event)
                         batcher?.flush()
                         Task { @MainActor [weak self] in
-                            self?.activeEventSources.insert("hook")
+                            self?.activeEventSources.insert(.hook)
                         }
                     }
                 )
@@ -171,7 +171,7 @@ public final class AppState {
         guard let dbPool = db else { return }
         let watcher = SessionFileWatcher { [weak self] payload in
             guard let self else { return }
-            // Log to HookLog for experiment analysis
+            // Log to HookLog for audit
             let log = HookLog(
                 receivedAt: Date(),
                 hookEventName: payload.hookEventName,
@@ -186,12 +186,12 @@ public final class AppState {
             Task {
                 await self.coordinator?.process(payload)
                 await MainActor.run {
-                    self.activeEventSources.insert("fileWatcher")
+                    self.activeEventSources.insert(.fileWatcher)
                 }
             }
         }
         fileWatcher = watcher
-        watcher.start()
+        Task { await watcher.start() }
     }
 
     private func markStaleSessions() {
