@@ -161,3 +161,86 @@ sqlite3 ~/Library/Application\ Support/AgentPilot/db.sqlite \
      AND (julianday(l2.received_at) - julianday(l1.received_at)) * 86400 < 2
    WHERE l1.received_at > datetime('now', '-1 hour');"
 ```
+
+---
+
+## Hybrid Experiment Run — 2026-04-16
+
+### Configuration
+- Config: analytical experiment (no live app — `JournalEventNormalizer` mapping rules applied directly to JSONL files in Python, compared against `hook_logs` DB)
+- Time window: 2026-04-14 to 2026-04-15 (latest available data in both sources; DB max timestamp = 2026-04-15 04:41)
+- Hook DB: `~/Library/Application Support/AgentPilot/db.sqlite`
+- JSONL root: `~/.claude/projects/**/*.jsonl`
+- Analysis scope: main session files only (subagent files at `.../subagents/*.jsonl` excluded); entries timestamp-filtered to >= 2026-04-14
+- Shared sessions analyzed: 11 (hook_sessions ∩ fw_sessions)
+- Note: `event_source` column does not yet exist in the live DB (v10 migration not yet run); this run compared sources analytically rather than via the live wiring
+
+### Results
+
+**Hook DB (2026-04-14+, business events only — PreToolUse/PostToolUse excluded):**
+
+| Event Type        | Count | Sessions |
+|-------------------|-------|----------|
+| UserPromptSubmit  | 136   | 11/18    |
+| Notification      | 134   | 9/18     |
+| Stop              | 121   | 11/18    |
+| SessionStart      | 18    | 11/18    |
+| SessionEnd        | 9     | 8/18     |
+| **TOTAL**         | **418** | 18     |
+
+**File Watcher (JSONL, timestamp-filtered to 2026-04-14+, main files only):**
+
+| Event Type        | Count | Sessions |
+|-------------------|-------|----------|
+| UserPromptSubmit  | 201   | 11/13    |
+| Stop              | 45    | 2/13     |
+| SessionStart      | 16    | 2/13     |
+| Notification      | 0     | 0/13     |
+| SessionEnd        | 0     | 0/13     |
+| **TOTAL**         | **262** | 13    |
+
+### Coverage Comparison (shared sessions only, n=11)
+
+| Event Type            | Hook Source | File Watcher | FW/Hook% | Sessions (Hook) | Sessions (FW) |
+|-----------------------|-------------|--------------|----------|-----------------|----------------|
+| UserPromptSubmit      | 136         | 201          | 148%     | 11/11           | 11/11          |
+| Stop                  | 121         | 45           | 37%      | 11/11           | 2/11           |
+| Notification          | 134         | 0            | 0%       | 9/11            | 0/11           |
+| SessionStart          | 18          | 16           | 89%      | 11/11           | 2/11           |
+| SessionEnd            | 9           | 0            | 0%       | 8/11            | 0/11           |
+
+### Normalizer Bugs Found
+
+**Bug 1 — Stop detection uses wrong field path**
+
+`JournalEventNormalizer` currently checks `entry["message"]["type"] == "stop_hook_summary"` but the actual JSONL structure has no `message` key on these entries. The real signal is a top-level `subtype` field:
+
+```json
+{
+  "type": "system",
+  "subtype": "stop_hook_summary",
+  "cwd": "...",
+  "sessionId": "..."
+}
+```
+
+Fix: check `entry["subtype"] == "stop_hook_summary"` directly.
+Impact: **Stop coverage = 37%** (only sessions that also have `progress` entries with `hookEvent=Stop` are caught — a minority).
+
+**Bug 2 — Notification has no detectable JSONL signal**
+
+The normalizer attempts to find `Notification` events by scanning for `AskUserQuestion` tool_use entries in assistant content. In practice, zero such entries exist in real sessions. The hook DB shows Notifications fire as `permission_prompt` (77 events) and `idle_prompt` (57 events) — both triggered by Claude Code's hook system, not captured in JSONL content.
+Impact: **Notification coverage = 0%**. This event type is fundamentally undetectable from JSONL.
+
+**Bug 3 — Subagent file inflation**
+
+All subagent JSONL files at `.../subagents/<child-uuid>.jsonl` carry the parent `sessionId`. Including them inflates `UserPromptSubmit` counts ~3x (60 subagent files vs 14 main files in the test window). Even main-file-only counts run 48% over hook DB because a long Claude Code session accumulates all historical user turns across compact/resume cycles while hooks only fire for turns in the active window.
+Fix: exclude `/subagents/` paths in `SessionFileWatcher` (already planned), and consider deduplication via a seen-UUIDs set.
+
+### Double-Dismiss Risk
+
+Zero `UserPromptSubmit` pairs within 2 seconds found in hook_logs over the analysis window. No double-dismiss risk observed from the HTTP hook source in isolation. However, enabling both sources simultaneously without content-based deduplication (e.g., matching on `promptId` or entry UUID) would produce duplicate `UserPromptSubmit` events on every user turn.
+
+### Conclusion
+
+The file-watcher approach as currently specified is **not viable as a standalone replacement** for HTTP hooks. `Stop` coverage is 37% due to a normalizer bug (wrong field path for `stop_hook_summary` detection), `Notification` coverage is 0% (the signal does not exist in JSONL content), and `SessionEnd` is undetectable. `UserPromptSubmit` is detectable but over-counted by ~48% even with subagent files excluded. For the hybrid model, the file watcher is best scoped as a **UserPromptSubmit fallback only** (to catch sessions where hooks are not installed); all other state-critical events — particularly `Stop` and `Notification` — must continue to come from the HTTP hook source. The `stop_hook_summary` field-path bug in `JournalEventNormalizer.swift` must be fixed before any live experiment run.
