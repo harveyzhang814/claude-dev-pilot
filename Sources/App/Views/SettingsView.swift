@@ -196,6 +196,22 @@ struct SettingsView: View {
                     showRecentPayloads = true
                 }
             }
+
+            // Debug section — event source visibility
+            Section("Debug") {
+                HStack {
+                    Text("Event Sources")
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Label("hooks", systemImage: "network")
+                            .foregroundStyle(appState.activeEventSources.contains("hook") ? .green : .secondary)
+                            .font(.caption)
+                        Label("file watcher", systemImage: "doc.text")
+                            .foregroundStyle(appState.activeEventSources.contains("fileWatcher") ? .green : .secondary)
+                            .font(.caption)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(width: 400)
