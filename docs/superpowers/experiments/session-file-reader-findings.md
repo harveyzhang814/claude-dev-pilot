@@ -115,6 +115,7 @@ Classification rules were designed in three phases:
 ## TODO
 
 - [ ] Goal C: LLM summarization of conversation content (summarize assistant turns for display in SessionPanelView)
+- [ ] Goal D: Session detail view — read conversation content directly from JSONL file via sessionId→file mapping (`~/.claude/projects/**/<sessionId>.jsonl`). Since sessionId = filename, any active session can be linked to its full conversation history without additional hooks.
 - [ ] Patch Rule 3a/3b with age gate (idle/stale boundary fix)
 - [ ] Implement dual-format stop detection (pre/post v2.1.92)
 - [ ] Investigate whether `SessionEnd` can be force-emitted via Claude Code config, or if `completed` state must be inferred differently
