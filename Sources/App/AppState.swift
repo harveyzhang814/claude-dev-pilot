@@ -181,7 +181,13 @@ public final class AppState {
                 endpoint: "file-watcher",
                 eventSource: "file_watcher"
             )
-            try? dbPool.write { db in try log.insert(db) }
+            do {
+                try dbPool.write { db in try log.insert(db) }
+            } catch {
+                #if DEBUG
+                print("[AgentPilot] HookLog write failed (file-watcher): \(error)")
+                #endif
+            }
             // Feed into coordinator (same pipeline as HTTP hooks)
             Task {
                 await self.coordinator?.process(payload)
