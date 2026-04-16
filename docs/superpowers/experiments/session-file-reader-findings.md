@@ -291,3 +291,33 @@ With the `stop_hook_summary` bug fixed, the file watcher can detect **both `User
 - The Reducer's idempotent window handling absorbs `Stop` duplicates (stop window re-entry is safe)
 - `UserPromptSubmit` double-dismiss requires validation: run a 2s duplicate query after live experiment
 
+
+---
+
+## Config C Simulation — 2026-04-16
+
+**方法：** 直接实例化 `HookStreamCoordinator` + 内存 DB，模拟 hook 和文件监听两个源对同一 session 发送事件。5 个场景，206 tests 全过。
+
+### 场景结果
+
+| 场景 | 描述 | 结果 |
+|------|------|------|
+| 1 | UserPromptSubmit hook → 再来 fileWatcher | ✅ 安全。第二次 dismiss 幂等，多 1 条 background DevEvent |
+| 2 | Stop hook → 再来 fileWatcher Stop | ✅ 安全。stop window 重启，最终只产生 1 个 agentStopped |
+| 3 | 仅文件监听，无 SessionStart | ⚠️ **DB 状态错误**：首次 UserPromptSubmit 建立 session 时 DB 写入 `idle` 而非 `busy`（内存状态正确）。第二轮之后正常 |
+| 4 | hook + fileWatcher 并发 UserPromptSubmit | ✅ 安全。Actor 串行化保证无竞争，状态一致 |
+| 5 | fileWatcher 先于 hook 到达 | ✅ 安全。顺序无关，最终均为 `busy` |
+
+### 关键结论
+
+**Config C（混合）可以安全运行**，以下条件下无问题：
+- 重复 `UserPromptSubmit`：多一条 background 事件，不影响 UI（background tier 被过滤）
+- 重复 `Stop`：stop window 重启，幂等，无重复 `agentStopped`
+- 并发安全：actor 保证
+
+**唯一实际问题（场景 3）：** 文件监听在没有 `SessionStart` 信号时，首次 `UserPromptSubmit` 建立的 session DB 状态为 `idle`（但内存为 `busy`）。对 UI 的影响：下一次 `ValueObservation` 刷新会显示 `idle` 而非 `busy`，直到第二轮才纠正。
+
+**根本原因：** 当前版本 Claude Code（v2.1.92+）不在 JSONL 写入 `SessionStart`（无 progress 条目），文件监听无法检测 session 启动。
+
+**修复选项：** 在 `HookStreamCoordinator` 的 `upsertSession` 路径中，当事件为 `UserPromptSubmit` 时若 session 不存在则直接创建为 `busy`，而非走 `idle` fallback。
+
