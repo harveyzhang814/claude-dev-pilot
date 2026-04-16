@@ -90,6 +90,8 @@ public final class SessionFileWatcher: @unchecked Sendable {
     }
 
     /// Reads new UTF-8 lines from `path` starting at `offset`, updates `offset` in place.
+    /// Only advances the offset to the end of the last complete line (terminated by `\n`),
+    /// so a partial trailing line (mid-write) will be re-read and completed on the next poll.
     public static func readNewLines(from path: String, offset: inout Int) -> [String] {
         guard
             let handle = FileHandle(forReadingAtPath: path)
@@ -97,11 +99,14 @@ public final class SessionFileWatcher: @unchecked Sendable {
         defer { handle.closeFile() }
         handle.seek(toFileOffset: UInt64(offset))
         let data = handle.readDataToEndOfFile()
-        offset += data.count
         guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return [] }
-        return text
+        // Advance offset only to the end of the last complete line.
+        let lastNewline = (text as NSString).range(of: "\n", options: .backwards)
+        guard lastNewline.location != NSNotFound else { return [] }
+        let completeText = (text as NSString).substring(to: lastNewline.location + 1)
+        offset += completeText.utf8.count
+        return completeText
             .components(separatedBy: "\n")
-            // Incomplete final lines (no trailing \n) are silently dropped and will be re-read next poll once the write completes.
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 }

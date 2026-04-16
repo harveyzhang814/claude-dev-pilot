@@ -35,6 +35,37 @@ struct SessionFileWatcherTests {
         #expect(offset == line1.utf8.count + line2.utf8.count)
     }
 
+    @Test("incrementalRead does not advance offset past a partial (unterminated) line")
+    func partialLineNotConsumed() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let file = dir.appendingPathComponent("partial.jsonl")
+        let complete = "{\"type\":\"user\",\"sessionId\":\"s1\",\"cwd\":\"/p\"}\n"
+        let partial  = "{\"type\":\"assistant\""  // no trailing newline
+        try (complete + partial).write(to: file, atomically: true, encoding: .utf8)
+
+        var offset: Int = 0
+        let lines = SessionFileWatcher.readNewLines(from: file.path, offset: &offset)
+        // Only the complete line should be returned
+        #expect(lines.count == 1)
+        #expect(lines[0].contains("\"user\""))
+        // Offset should stop at the end of the complete line, not include the partial bytes
+        #expect(offset == complete.utf8.count)
+
+        // Now complete the partial line
+        let handle = try FileHandle(forWritingTo: file)
+        handle.seekToEndOfFile()
+        handle.write(",\"sessionId\":\"s2\",\"cwd\":\"/p\"}\n".data(using: .utf8)!)
+        handle.closeFile()
+
+        let more = SessionFileWatcher.readNewLines(from: file.path, offset: &offset)
+        #expect(more.count == 1)
+        #expect(more[0].contains("\"assistant\""))
+    }
+
     @Test("scanActiveFiles returns only files with mtime within window")
     func scanActiveFiles() throws {
         let dir = FileManager.default.temporaryDirectory
