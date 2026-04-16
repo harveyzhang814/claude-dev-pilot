@@ -200,10 +200,10 @@ struct SettingsView: View {
                     Spacer()
                     HStack(spacing: 6) {
                         Label("hooks", systemImage: "network")
-                            .foregroundStyle(appState.activeEventSources.contains("hook") ? .green : .secondary)
+                            .foregroundStyle(appState.activeEventSources.contains(.hook) ? .green : .secondary)
                             .font(.caption)
                         Label("file watcher", systemImage: "doc.text")
-                            .foregroundStyle(appState.activeEventSources.contains("fileWatcher") ? .green : .secondary)
+                            .foregroundStyle(appState.activeEventSources.contains(.fileWatcher) ? .green : .secondary)
                             .font(.caption)
                     }
                 }

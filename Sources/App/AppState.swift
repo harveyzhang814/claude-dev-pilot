@@ -22,12 +22,12 @@ public final class AppState {
     // HookStreamCoordinator
     private var coordinator: HookStreamCoordinator?
 
-    // File watcher (experimental — opt-in via UserDefaults "fileWatcherEnabled")
+    // File watcher
     private var fileWatcher: SessionFileWatcher?
 
     /// Which event sources have produced at least one payload this session.
     /// Read by SettingsView for debug display.
-    private(set) var activeEventSources: Set<String> = []
+    private(set) var activeEventSources: Set<EventSource> = []
 
     // State
     var serverRunning: Bool = false
@@ -104,13 +104,14 @@ public final class AppState {
             setFloatWindowMode(true)
         }
 
-        // Start file watcher if enabled (experimental)
-        if UserDefaults.standard.bool(forKey: "fileWatcherEnabled") {
+        // Start HTTP server first so coordinator is ready before file watcher begins polling
+        await startServer()
+
+        // Start file watcher (enabled by default; can be disabled via UserDefaults "fileWatcherEnabled")
+        let fileWatcherEnabled = UserDefaults.standard.object(forKey: "fileWatcherEnabled") as? Bool ?? true
+        if fileWatcherEnabled {
             startFileWatcher()
         }
-
-        // Start HTTP server
-        await startServer()
     }
 
     private func startServer() async {
@@ -150,7 +151,7 @@ public final class AppState {
                         batcher?.submit(event)
                         batcher?.flush()
                         Task { @MainActor [weak self] in
-                            self?.activeEventSources.insert("hook")
+                            self?.activeEventSources.insert(.hook)
                         }
                     }
                 )
@@ -170,7 +171,7 @@ public final class AppState {
         guard let dbPool = db else { return }
         let watcher = SessionFileWatcher { [weak self] payload in
             guard let self else { return }
-            // Log to HookLog for experiment analysis
+            // Log to HookLog for audit
             let log = HookLog(
                 receivedAt: Date(),
                 hookEventName: payload.hookEventName,
@@ -180,17 +181,23 @@ public final class AppState {
                 endpoint: "file-watcher",
                 eventSource: "file_watcher"
             )
-            try? dbPool.write { db in try log.insert(db) }
+            do {
+                try dbPool.write { db in try log.insert(db) }
+            } catch {
+                #if DEBUG
+                print("[AgentPilot] HookLog write failed (file-watcher): \(error)")
+                #endif
+            }
             // Feed into coordinator (same pipeline as HTTP hooks)
             Task {
                 await self.coordinator?.process(payload)
                 await MainActor.run {
-                    self.activeEventSources.insert("fileWatcher")
+                    self.activeEventSources.insert(.fileWatcher)
                 }
             }
         }
         fileWatcher = watcher
-        watcher.start()
+        Task { await watcher.start() }
     }
 
     private func markStaleSessions() {
@@ -232,6 +239,17 @@ public final class AppState {
         let retentionDays = days > 0 ? days : 30
         try? EventStore.pruneOlderThan(days: retentionDays, in: db)
         try? HookLogStore.pruneOlderThan(days: retentionDays, in: db)
+    }
+
+    public func stop() {
+        serverTask?.cancel()
+        serverTask = nil
+        staleTimer?.invalidate()
+        staleTimer = nil
+        if let watcher = fileWatcher {
+            Task { await watcher.stop() }
+            fileWatcher = nil
+        }
     }
 
     public func completeOnboarding() {

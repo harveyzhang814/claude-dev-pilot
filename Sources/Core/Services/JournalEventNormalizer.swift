@@ -8,7 +8,7 @@ public enum JournalEventNormalizer {
         guard
             let type = entry["type"] as? String,
             let sessionId = entry["sessionId"] as? String, !sessionId.isEmpty,
-            let cwd = entry["cwd"] as? String
+            let cwd = entry["cwd"] as? String, !cwd.isEmpty
         else { return nil }
 
         switch type {

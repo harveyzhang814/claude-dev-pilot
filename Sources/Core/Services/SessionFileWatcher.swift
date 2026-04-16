@@ -1,6 +1,6 @@
 import Foundation
 
-public final class SessionFileWatcher: @unchecked Sendable {
+public actor SessionFileWatcher {
 
     public typealias PayloadHandler = @Sendable (HookPayload) -> Void
 
@@ -10,7 +10,6 @@ public final class SessionFileWatcher: @unchecked Sendable {
     private let onPayload: PayloadHandler
     private var offsets: [String: Int] = [:]   // filePath → byte offset
     private var timer: DispatchSourceTimer?
-    private let queue = DispatchQueue(label: "com.agentpilot.filewatcher", qos: .background)
 
     public init(
         projectsRoot: String = (FileManager.default.homeDirectoryForCurrentUser
@@ -26,9 +25,13 @@ public final class SessionFileWatcher: @unchecked Sendable {
     }
 
     public func start() {
+        let queue = DispatchQueue(label: "com.agentpilot.filewatcher", qos: .background)
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: pollInterval)
-        t.setEventHandler { [weak self] in self?.poll() }
+        t.setEventHandler { [weak self] in
+            guard let self else { return }
+            Task { await self.poll() }
+        }
         t.resume()
         timer = t
     }
@@ -72,6 +75,8 @@ public final class SessionFileWatcher: @unchecked Sendable {
         var result: [String] = []
         for case let url as URL in enumerator {
             guard url.pathExtension == "jsonl" else { continue }
+            // Skip subagent session files — they create noise and are not user-initiated.
+            guard !url.pathComponents.contains("subagents") else { continue }
             guard let mtime = try? url.resourceValues(forKeys: [.contentModificationDateKey])
                     .contentModificationDate else { continue }
             if mtime >= cutoff {
