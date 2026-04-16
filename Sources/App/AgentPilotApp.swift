@@ -1,8 +1,18 @@
 import SwiftUI
+import AppKit
 import Core
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    var appState: AppState?
+
+    func applicationWillTerminate(_ notification: Notification) {
+        appState?.stop()
+    }
+}
 
 @main
 struct AgentPilotApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState: AppState = AppState()
 
     var body: some Scene {
@@ -38,6 +48,7 @@ struct AgentPilotApp: App {
                 // Register focus handler before start() so FloatWindowController
                 // receives it when floatWindowMode is restored.
                 appState.focusSessionHandler = { session in focusSession(session) }
+                appDelegate.appState = appState
                 await appState.start()
             }
         }

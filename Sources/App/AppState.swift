@@ -22,7 +22,7 @@ public final class AppState {
     // HookStreamCoordinator
     private var coordinator: HookStreamCoordinator?
 
-    // File watcher (experimental — opt-in via UserDefaults "fileWatcherEnabled")
+    // File watcher
     private var fileWatcher: SessionFileWatcher?
 
     /// Which event sources have produced at least one payload this session.
@@ -239,6 +239,17 @@ public final class AppState {
         let retentionDays = days > 0 ? days : 30
         try? EventStore.pruneOlderThan(days: retentionDays, in: db)
         try? HookLogStore.pruneOlderThan(days: retentionDays, in: db)
+    }
+
+    public func stop() {
+        serverTask?.cancel()
+        serverTask = nil
+        staleTimer?.invalidate()
+        staleTimer = nil
+        if let watcher = fileWatcher {
+            Task { await watcher.stop() }
+            fileWatcher = nil
+        }
     }
 
     public func completeOnboarding() {

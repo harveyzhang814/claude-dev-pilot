@@ -178,6 +178,19 @@ struct JournalEventNormalizerTests {
         #expect(payload == nil)
     }
 
+    @Test("entry with empty cwd → nil")
+    func emptyCwd() {
+        let entry: [String: Any] = [
+            "type": "user",
+            "sessionId": "sess-1",
+            "cwd": "",
+            "timestamp": "2026-04-16T10:00:00.000Z",
+            "message": ["role": "user", "content": "hi"]
+        ]
+        let payload = JournalEventNormalizer.normalize(entry)
+        #expect(payload == nil)
+    }
+
     @Test("unknown entry type → nil")
     func unknownType() {
         let entry: [String: Any] = [
