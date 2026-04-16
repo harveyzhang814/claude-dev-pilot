@@ -22,6 +22,13 @@ public final class AppState {
     // HookStreamCoordinator
     private var coordinator: HookStreamCoordinator?
 
+    // File watcher (experimental — opt-in via UserDefaults "fileWatcherEnabled")
+    private var fileWatcher: SessionFileWatcher?
+
+    /// Which event sources have produced at least one payload this session.
+    /// Read by SettingsView for debug display.
+    private(set) var activeEventSources: Set<String> = []
+
     // State
     var serverRunning: Bool = false
     var notificationsAuthorized: Bool = false
@@ -97,6 +104,11 @@ public final class AppState {
             setFloatWindowMode(true)
         }
 
+        // Start file watcher if enabled (experimental)
+        if UserDefaults.standard.bool(forKey: "fileWatcherEnabled") {
+            startFileWatcher()
+        }
+
         // Start HTTP server
         await startServer()
     }
@@ -133,10 +145,13 @@ public final class AppState {
                     authToken: token,
                     port: resolvedPort,
                     coordinator: hookCoordinator,
-                    onEvent: { event in
+                    onEvent: { [weak self] event in
                         guard event.attentionTier != .background else { return }
                         batcher?.submit(event)
                         batcher?.flush()
+                        Task { @MainActor [weak self] in
+                            self?.activeEventSources.insert("hook")
+                        }
                     }
                 )
                 try await app.run()
@@ -149,6 +164,33 @@ public final class AppState {
         }
 
         serverRunning = true
+    }
+
+    private func startFileWatcher() {
+        guard let dbPool = db else { return }
+        let watcher = SessionFileWatcher { [weak self] payload in
+            guard let self else { return }
+            // Log to HookLog for experiment analysis
+            let log = HookLog(
+                receivedAt: Date(),
+                hookEventName: payload.hookEventName,
+                sessionId: payload.sessionId,
+                notificationType: payload.notificationType,
+                rawPayload: "[file-watcher]",
+                endpoint: "file-watcher",
+                eventSource: "file_watcher"
+            )
+            try? dbPool.write { db in try log.insert(db) }
+            // Feed into coordinator (same pipeline as HTTP hooks)
+            Task {
+                await self.coordinator?.process(payload)
+                await MainActor.run {
+                    self.activeEventSources.insert("fileWatcher")
+                }
+            }
+        }
+        fileWatcher = watcher
+        watcher.start()
     }
 
     private func markStaleSessions() {
