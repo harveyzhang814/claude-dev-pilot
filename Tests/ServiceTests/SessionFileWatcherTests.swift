@@ -66,6 +66,24 @@ struct SessionFileWatcherTests {
         #expect(more[0].contains("\"assistant\""))
     }
 
+    @Test("scanActiveFiles excludes files inside subagents/ subdirectory")
+    func subagentFilesExcluded() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let subagentsDir = dir.appendingPathComponent("subagents")
+        try FileManager.default.createDirectory(at: subagentsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let topLevel = dir.appendingPathComponent("session.jsonl")
+        let subagent = subagentsDir.appendingPathComponent("sub.jsonl")
+        try "{}".write(to: topLevel, atomically: true, encoding: .utf8)
+        try "{}".write(to: subagent, atomically: true, encoding: .utf8)
+
+        let found = SessionFileWatcher.scanActiveFiles(in: dir.path, activeWindowSeconds: 1800)
+        #expect(found.contains(topLevel.path))
+        #expect(!found.contains(subagent.path))
+    }
+
     @Test("scanActiveFiles returns only files with mtime within window")
     func scanActiveFiles() throws {
         let dir = FileManager.default.temporaryDirectory

@@ -72,6 +72,8 @@ public final class SessionFileWatcher: @unchecked Sendable {
         var result: [String] = []
         for case let url as URL in enumerator {
             guard url.pathExtension == "jsonl" else { continue }
+            // Skip subagent session files — they create noise and are not user-initiated.
+            guard !url.pathComponents.contains("subagents") else { continue }
             guard let mtime = try? url.resourceValues(forKeys: [.contentModificationDateKey])
                     .contentModificationDate else { continue }
             if mtime >= cutoff {
