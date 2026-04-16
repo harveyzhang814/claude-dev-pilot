@@ -119,3 +119,45 @@ Classification rules were designed in three phases:
 - [ ] Implement dual-format stop detection (pre/post v2.1.92)
 - [ ] Investigate whether `SessionEnd` can be force-emitted via Claude Code config, or if `completed` state must be inferred differently
 - [ ] Measure performance of scanning 980 files on startup (target < 500ms)
+
+---
+
+## Hybrid Experiment Procedure
+
+### Enable file watcher
+
+```bash
+defaults write com.agentpilot.AgentPilot fileWatcherEnabled -bool true
+```
+
+### Disable file watcher (hooks-only baseline)
+
+```bash
+defaults write com.agentpilot.AgentPilot fileWatcherEnabled -bool false
+```
+
+### Query event source coverage (run after each config)
+
+```bash
+sqlite3 ~/Library/Application\ Support/AgentPilot/db.sqlite \
+  "SELECT event_source, hook_event_name, COUNT(*) as n
+   FROM hook_logs
+   WHERE received_at > datetime('now', '-1 hour')
+   GROUP BY event_source, hook_event_name
+   ORDER BY event_source, n DESC;"
+```
+
+### Check for double-dismiss (UserPromptSubmit duplicates within 2s)
+
+```bash
+sqlite3 ~/Library/Application\ Support/AgentPilot/db.sqlite \
+  "SELECT l1.session_id, l1.received_at, l2.received_at, l1.event_source, l2.event_source
+   FROM hook_logs l1
+   JOIN hook_logs l2
+     ON l1.session_id = l2.session_id
+     AND l1.hook_event_name = 'UserPromptSubmit'
+     AND l2.hook_event_name = 'UserPromptSubmit'
+     AND l1.id < l2.id
+     AND (julianday(l2.received_at) - julianday(l1.received_at)) * 86400 < 2
+   WHERE l1.received_at > datetime('now', '-1 hour');"
+```
