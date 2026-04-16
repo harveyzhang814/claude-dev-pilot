@@ -101,6 +101,7 @@ public final class SessionFileWatcher: @unchecked Sendable {
         guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return [] }
         return text
             .components(separatedBy: "\n")
+            // Incomplete final lines (no trailing \n) are silently dropped and will be re-read next poll once the write completes.
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 }
