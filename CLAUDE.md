@@ -183,7 +183,7 @@ State transitions computed by `SessionStateReducer.reduce()`, executed by `HookS
 
 ### Stale session and pruning
 
-- Stale detection: 60-second timer in `AppState.markStaleSessions()`. A session is a candidate if: status is `idle/busy/waiting`, `started_at` > 30 min ago, no `events` row newer than 30 min, **and** no `hook_logs` row newer than 30 min (the hook_logs check prevents false-positives for long tool calls that produce no DevEvents). Candidates with a live TTY (`lsof -t <tty>` exits 0) are kept active.
+- Stale detection runs in two phases via `AppState.markStaleSessions()`, called once at app startup and then every 60 seconds. **Phase 1** (immediate): all active sessions whose TTY is dead (`lsof -t <tty>` exits non-zero) are marked stale right away — no inactivity wait. This catches sessions whose terminal was closed or process was killed. **Phase 2** (30-min inactivity gate): sessions with no TTY info are marked stale if status is `idle/busy/waiting`, `started_at` > 30 min ago, no `events` row newer than 30 min, **and** no `hook_logs` row newer than 30 min (the hook_logs check prevents false-positives for long tool calls that produce no DevEvents). Sessions with a live TTY are kept active regardless of inactivity.
 - When a stale session receives a new hook event, `updateSessionStatus` reopens it (sets status, clears `ended_at`) rather than dropping the update.
 - Pruning: lazy, once per day, configurable retention via `UserDefaults` key `retentionDays` (default 30)
 
