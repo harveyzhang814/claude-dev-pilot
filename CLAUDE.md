@@ -41,6 +41,12 @@ make run
 # Build bundle without launching
 make bundle
 
+# Release build — optimized binary + signed .app, suitable for /Applications
+make dist
+
+# Release build + copy to /Applications (installs system-wide)
+make install
+
 # Clean
 make clean
 ```
