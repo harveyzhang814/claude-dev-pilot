@@ -25,10 +25,9 @@ public enum SessionStore {
     }
 
     public static func close(id: String, status: SessionStatus, in db: any DatabaseWriter) throws {
-        let now = ISO8601DateFormatter().string(from: Date())
         try db.write { db in
             try db.execute(sql: "UPDATE sessions SET status = ?, ended_at = ? WHERE id = ?",
-                           arguments: [status.rawValue, now, id])
+                           arguments: [status.rawValue, Date(), id])
         }
     }
 
@@ -72,10 +71,12 @@ public enum SessionStore {
     /// Marks specific sessions as stale (used after TTY-liveness filtering).
     public static func markStale(ids: [String], in db: any DatabaseWriter) throws {
         guard !ids.isEmpty else { return }
-        let now = ISO8601DateFormatter().string(from: Date())
         let placeholders = repeatElement("?", count: ids.count).joined(separator: ", ")
         try db.write { db in
-            var arguments = StatementArguments([now])
+            // Pass Date() directly so GRDB stores it as a Double (timeIntervalSinceReferenceDate),
+            // which it can decode back correctly. ISO8601DateFormatter produces a "Z"-suffixed
+            // string that GRDB cannot decode as Date, breaking future DevSession.fetchOne calls.
+            var arguments = StatementArguments([Date()])
             for id in ids { arguments += [id] }
             try db.execute(
                 sql: "UPDATE sessions SET status = 'stale', ended_at = ? WHERE id IN (\(placeholders))",
@@ -86,21 +87,18 @@ public enum SessionStore {
 
     @discardableResult
     public static func markStaleSessions(olderThan seconds: TimeInterval, in db: any DatabaseWriter) throws -> Int {
-        // GRDB stores dates in "YYYY-MM-DD HH:MM:SS.SSS" format (no T separator).
-        // Use the same format for SQL comparison to ensure correct ordering.
         let cutoffDate = Date(timeIntervalSinceNow: -seconds)
         let calendar = Calendar(identifier: .gregorian)
         var components = calendar.dateComponents(in: TimeZone(identifier: "UTC")!, from: cutoffDate)
         components.timeZone = TimeZone(identifier: "UTC")
         let cutoff = DatabaseDateComponents(components, format: .YMD_HMSS)
-        let now = ISO8601DateFormatter().string(from: Date())
         return try db.write { db in
             try db.execute(sql: """
                 UPDATE sessions SET status = 'stale', ended_at = ?
                 WHERE status IN ('idle', 'busy', 'waiting')
                 AND started_at < ?
                 AND id NOT IN (SELECT DISTINCT session_id FROM events WHERE timestamp > ?)
-                """, arguments: [now, cutoff, cutoff])
+                """, arguments: [Date(), cutoff, cutoff])
             return db.changesCount
         }
     }
