@@ -107,6 +107,10 @@ public final class AppState {
         // Start HTTP server first so coordinator is ready before file watcher begins polling
         await startServer()
 
+        // Immediately reconcile: mark sessions with dead TTYs as stale before the 60s timer fires.
+        // This cleans up sessions that closed while the app was not running.
+        markStaleSessions()
+
         // Start file watcher (enabled by default; can be disabled via UserDefaults "fileWatcherEnabled")
         let fileWatcherEnabled = UserDefaults.standard.object(forKey: "fileWatcherEnabled") as? Bool ?? true
         if fileWatcherEnabled {
@@ -203,11 +207,23 @@ public final class AppState {
     private func markStaleSessions() {
         guard let db else { return }
         do {
+            // Phase 1: Any active session whose TTY is already dead → mark stale immediately,
+            // regardless of how recently it had activity. This catches sessions whose terminal
+            // was closed or whose process was killed while the app was running or before a restart.
+            let allActive = try SessionStore.fetchActive(in: db)
+            let deadTTYIds = allActive.compactMap { session -> String? in
+                guard let tty = session.tty, !tty.isEmpty else { return nil }
+                return isTTYAlive(tty) ? nil : session.id
+            }
+            try SessionStore.markStale(ids: deadTTYIds, in: db)
+
+            // Phase 2: Sessions with no TTY info that have been inactive for 30+ minutes.
+            // (Sessions with a live TTY are kept active even if quiet — they may be running
+            //  a long task that produces no hook events.)
+            let alreadyMarked = Set(deadTTYIds)
             let candidates = try SessionStore.fetchStaleCandidates(olderThan: 30 * 60, in: db)
             let toMark = candidates.filter { session in
-                // If we have TTY info, only mark stale when the TTY is no longer alive.
-                // This prevents killing a session that is still running a long task but
-                // happens to be quiet (no hook events) for > 30 minutes.
+                guard !alreadyMarked.contains(session.id) else { return false }
                 guard let tty = session.tty, !tty.isEmpty else { return true }
                 return !isTTYAlive(tty)
             }
