@@ -28,9 +28,10 @@ swift test --filter ServerTests
 **运行应用：** 必须使用带 `CFBundleIdentifier` 的 `.app` 包，系统通知才能正常注册；不要用 `swift run` 代替日常启动。
 
 ```bash
-make run        # 构建 .app 并打开
-make bundle     # 只构建 .app
-make dist       # Release 包，可拖到「应用程序」
+make run        # 构建 debug .app 并打开
+make bundle     # 只构建 debug .app，不启动
+make dist       # Release 构建 + 代码签名，可拖到「应用程序」安装
+make install    # Release 构建 + 直接复制到 /Applications
 make clean      # 清理构建产物与本地 .app
 ```
 
