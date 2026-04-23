@@ -65,7 +65,10 @@ Agent Pilot is a macOS menubar app that receives Claude Code and Cursor IDE hook
 
 ### Event flow
 
+Two parallel event sources feed the same coordinator pipeline:
+
 ```
+[Path 1 — HTTP hooks]
 Claude Code hook → notify.sh → POST /event (port 9876) → EventHandler
   → HookLog INSERT (raw audit, per request)
   → HookEventClassifier.classify(payload) → HookEvent (typed enum)
@@ -84,7 +87,20 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
   → CursorNormalizer.normalize() (CursorHookPayload → HookPayload, injects tool="cursor")
   → same pipeline as above
   → unknown hook events silently dropped (200 OK, no DevEvent created)
+
+[Path 2 — SessionFileWatcher (fallback / redundancy)]
+DispatchSourceTimer (3s) → SessionFileWatcher.poll()
+  → scanActiveFiles(~/.claude/projects/, mtime < 30min, skip subagents/)
+  → readNewLines(jsonl, offset) → JournalEventNormalizer.normalize(entry)
+      "user" (string content)   → UserPromptSubmit
+      "assistant" (AskUserQuestion tool_use) → Notification/permission_prompt
+      "system" (stop_hook_summary) → Stop
+      "progress" (legacy ≤v2.1.81) → SessionStart / Stop / UserPromptSubmit
+  → HookLog INSERT (eventSource = "file_watcher")
+  → HookStreamCoordinator.process(payload)  [same pipeline as Path 1]
 ```
+
+Path 2 is enabled by default (`fileWatcherEnabled` UserDefaults key, default `true`). It catches activity when HTTP hooks are unavailable (app restart mid-session, hook registration failure). Only JSONL entries that map to meaningful state-machine events are forwarded; all others return nil and are dropped.
 
 ### SPM targets
 
@@ -109,7 +125,10 @@ Cursor hook → cursor-notify.sh → POST /cursor-event (port 9876) → EventHan
 | `HookLog` / `HookLogStore` | Core/Models + Core/Store | Debug audit log: one row per incoming HTTP request, inserted before any business logic. Fields: `hookEventName`, `sessionId`, `notificationType`, `rawPayload` (true raw JSON), `receivedAt`. Parse failures stored with `hookEventName = "PARSE_ERROR"`. Pruned by same `retentionDays` as events |
 | `HookEventClassifier` | Core/Services | Pure `HookPayload → HookEvent?` classifier. Returns `nil` for unrecognised hook names (caller silently ignores) |
 | `SessionStateReducer` | Core/Services | Pure reducer: `(SessionMachineState, HookEvent) → (SessionMachineState, [Action])`. 13 rules covering all session state transitions. No I/O |
+| `SessionMachineState` | Core/Services | In-memory state per session: `status`, `stopWindowActive`, `dbSessionExists`, `cwd`, `tool`. Stale/completed sessions are excluded from `restoreStates` (start from `.initial` if they receive new events) |
 | `HookStreamCoordinator` | Core/Services | Actor that drives the pipeline: calls classifier → reducer → executes `[Action]` (DB writes, stop window tasks). Maintains per-session `SessionMachineState` in memory |
+| `SessionFileWatcher` | Core/Services | Polls `~/.claude/projects/` JSONL files every 3s. Tracks per-file byte offset to read only new lines. Skips `subagents/` subdirectories. Controlled by `fileWatcherEnabled` UserDefaults key |
+| `JournalEventNormalizer` | Core/Services | Maps JSONL entries to `HookPayload`. Only 4 entry types produce payloads (see event flow above); all others return nil |
 | `NotificationBatcher` | Core/Services | Per-session batching (>3 events/2s) + global throttle (5/10s) |
 | `AuthTokenService` | Core/Services | Generates and persists a 32-byte hex token at `~/.agentpilot/token` (0600) |
 | `HookInstaller` | Core/Services | Embeds `notify.sh` and `cursor-notify.sh` scripts; writes to `~/.agentpilot/hooks/`. `claudeCodePrompt()` and `cursorAgentPrompt()` generate hook registration prompts |
@@ -153,12 +172,13 @@ State transitions computed by `SessionStateReducer.reduce()`, executed by `HookS
 - `UserPromptSubmit` hook → `.busy`; all prior events for session auto-dismissed
 - `Notification(permissionNeeded)` hook → `.waiting`
 - `Stop` hook → starts 2s stop window; window expiry (no `Notification`) → `.idle`; Stop + `Notification` within 2s → `.waiting`
-- Any hook on a completed/stale session → reopen to `.idle`
+- Any hook on a stale session via `updateSessionStatus` → reopen to the new status (e.g. `.busy` for `UserPromptSubmit`); `SessionStart` on stale/completed → reopen to `.idle` via `upsertSession`
 - 60s timer in `AppState` → `.stale` for sessions with no activity for 30 minutes
 
 ### Stale session and pruning
 
-- Stale detection: 60-second timer in `AppState`, marks sessions with no activity for 30 minutes as `.stale`
+- Stale detection: 60-second timer in `AppState.markStaleSessions()`. A session is a candidate if: status is `idle/busy/waiting`, `started_at` > 30 min ago, no `events` row newer than 30 min, **and** no `hook_logs` row newer than 30 min (the hook_logs check prevents false-positives for long tool calls that produce no DevEvents). Candidates with a live TTY (`lsof -t <tty>` exits 0) are kept active.
+- When a stale session receives a new hook event, `updateSessionStatus` reopens it (sets status, clears `ended_at`) rather than dropping the update.
 - Pruning: lazy, once per day, configurable retention via `UserDefaults` key `retentionDays` (default 30)
 
 ### UserDefaults keys
@@ -171,6 +191,7 @@ State transitions computed by `SessionStateReducer.reduce()`, executed by `HookS
 | `onboardingCompleted` | false | Onboarding gate |
 | `floatWindowPositions` | {} | Per-display-config float window positions: `[String: [String: Double]]`. Key = `CGDisplayVendorNumber-CGDisplayModelNumber-CGDisplaySerialNumber` per display, sorted, joined by `\|`. Value = `{x: Double, topY: Double}`. Written on user drag; restored on first show; invalidated if off-screen. |
 | `floatWindowHoverLocked` | false | Hover lock: when true, window stays in hover state and never auto-collapses to compact |
+| `fileWatcherEnabled` | true | Enable/disable `SessionFileWatcher` (Path 2 event source) |
 
 ### notify.sh
 
