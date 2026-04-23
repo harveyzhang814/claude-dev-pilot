@@ -47,6 +47,18 @@ make clean
 
 **Important:** `swift run` is not sufficient for development — the app requires a proper `.app` bundle with `CFBundleIdentifier` to register with `UNUserNotificationCenter`. Always use `make run` to launch.
 
+**Important:** When the app is launched via `make run`, `print()` and swift-log output go to macOS unified logging — not the terminal. Use the debug capture scripts to tap them:
+
+```bash
+# Debug logging
+bash harness/debug/start-log-capture.sh   # start capture → tmp/logs/app.log
+bash harness/debug/verify-logs.sh         # verify all sources OK
+bash harness/debug/run-tests.sh           # run tests, output → tmp/logs/test.log
+tail -f tmp/logs/app.log                  # live app log
+```
+
+See `harness/debug/README.md` for query patterns and full reference.
+
 ## Architecture
 
 Agent Pilot is a macOS menubar app that receives Claude Code and Cursor IDE hook events via HTTP and surfaces them as native notifications and a popover UI.
