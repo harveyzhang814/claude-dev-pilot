@@ -47,12 +47,25 @@ public enum SessionStore {
         components.timeZone = TimeZone(identifier: "UTC")
         let cutoff = DatabaseDateComponents(components, format: .YMD_HMSS)
         return try db.read { db in
-            try DevSession.fetchAll(db, sql: """
+            // Step 1: sessions with no recent DevEvent.
+            let candidates = try DevSession.fetchAll(db, sql: """
                 SELECT * FROM sessions
                 WHERE status IN ('idle', 'busy', 'waiting')
                 AND started_at < ?
                 AND id NOT IN (SELECT DISTINCT session_id FROM events WHERE timestamp > ?)
                 """, arguments: [cutoff, cutoff])
+            guard !candidates.isEmpty else { return [] }
+
+            // Step 2: exclude sessions that have had recent hook activity.
+            // hook_logs.received_at is stored as a Double (Date.timeIntervalSinceReferenceDate).
+            // Using GRDB's typed filter avoids raw-SQL type-coercion issues.
+            let recentLogs = try HookLog
+                .filter(HookLog.Columns.receivedAt > cutoffDate)
+                .filter(HookLog.Columns.sessionId != "")
+                .fetchAll(db)
+            let recentSessionIds = Set(recentLogs.map(\.sessionId))
+
+            return candidates.filter { !recentSessionIds.contains($0.id) }
         }
     }
 
