@@ -105,14 +105,18 @@ public actor HookStreamCoordinator {
                 let fallbackCwd = states[sid]?.cwd
                 let fallbackTool = states[sid]?.tool ?? "claude-code"
                 try? await db.write { db in
-                    if (try DevSession.fetchOne(db, key: sid)) != nil {
-                        try db.execute(
-                            sql: """
-                                UPDATE sessions SET status = ?
-                                WHERE id = ? AND status NOT IN ('completed', 'stale')
-                                """,
-                            arguments: [status.rawValue, sid]
-                        )
+                    if var existing = try DevSession.fetchOne(db, key: sid) {
+                        if existing.status == .stale {
+                            // Reopen: new hook activity means the session is live again.
+                            existing.status = status
+                            existing.endedAt = nil
+                            try existing.update(db)
+                        } else if existing.status != .completed {
+                            try db.execute(
+                                sql: "UPDATE sessions SET status = ? WHERE id = ?",
+                                arguments: [status.rawValue, sid]
+                            )
+                        }
                     } else if status != .completed && status != .stale {
                         // SessionStart was missed — create a minimal session.
                         // Only for active statuses: terminal states (completed/stale)

@@ -422,4 +422,83 @@ struct HookStreamCoordinatorTests {
         let events = try await db.read { try DevEvent.fetchAll($0) }
         #expect(events.contains { $0.type == .permissionNeeded && $0.attentionTier == .action })
     }
+
+    // MARK: - Stale session reopen
+
+    /// A session marked stale must reopen to the correct active status when new hook
+    /// activity arrives, rather than remaining stuck in the stale state.
+    @Test func staleSessionReopensOnNewActivity() async throws {
+        let db    = try makeDB()
+        let coord = makeCoordinator(db: db, windowMs: 50)
+        let sid   = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        let cwd   = "/Users/alice/Projects/my-app"
+
+        // Establish a full session so it exists in DB.
+        await coord.process(HookPayload(
+            sessionId: sid, cwd: cwd, hookEventName: "SessionStart",
+            source: "startup", model: "claude-sonnet-4-6",
+            tty: "/dev/ttys003", terminalApp: "ghostty"
+        ))
+        await coord.process(HookPayload(
+            sessionId: sid, cwd: cwd, hookEventName: "UserPromptSubmit",
+            transcriptPath: "/tmp/t.jsonl"
+        ))
+
+        // Manually force the session to stale (simulating the 30-min timer firing).
+        try await db.write { db in
+            try db.execute(
+                sql: "UPDATE sessions SET status = 'stale', ended_at = '2024-01-01 00:00:00.000' WHERE id = ?",
+                arguments: [sid]
+            )
+        }
+        let staleCheck = try await db.read { try DevSession.fetchOne($0, key: sid) }
+        #expect(staleCheck?.status == .stale, "precondition: session must be stale before reopen test")
+
+        // New activity arrives (user submitted a new prompt).
+        await coord.process(HookPayload(
+            sessionId: sid, cwd: cwd, hookEventName: "UserPromptSubmit",
+            transcriptPath: "/tmp/t.jsonl"
+        ))
+
+        let reopened = try await db.read { try DevSession.fetchOne($0, key: sid) }
+        #expect(reopened?.status == .busy,     "stale session must reopen to .busy on UserPromptSubmit")
+        #expect(reopened?.endedAt == nil,      "endedAt must be cleared when stale session reopens")
+    }
+
+    /// fetchStaleCandidates must exclude sessions that have had recent hook_logs activity,
+    /// even if the events table has no new rows (e.g. long-running tool call with no DevEvent).
+    @Test func staleCandidatesExcludesSessionsWithRecentHookLogs() async throws {
+        let db = try DatabaseQueue()
+        try DatabaseManager.migrate(db)
+
+        let oldDate = Date(timeIntervalSinceNow: -7200)  // 2 hours ago — no recent hook logs
+        let sid1 = "stale-candidate-1"
+        let sid2 = "recent-hook-log-2"
+
+        try await db.write { db in
+            var s1 = DevSession(id: sid1, project: "proj", tool: "claude-code",
+                                status: .idle, startedAt: oldDate,
+                                endedAt: nil, totalTokens: nil, lastEventTitle: nil)
+            var s2 = DevSession(id: sid2, project: "proj", tool: "claude-code",
+                                status: .busy, startedAt: oldDate,
+                                endedAt: nil, totalTokens: nil, lastEventTitle: nil)
+            try s1.insert(db)
+            try s2.insert(db)
+
+            // sid2 has a hook_log within the last minute (simulating a live busy session).
+            let recentLog = HookLog(
+                receivedAt: Date(),
+                hookEventName: "PreToolUse",
+                sessionId: sid2,
+                notificationType: nil,
+                rawPayload: "{}"
+            )
+            try recentLog.insert(db)
+        }
+
+        let candidates = try SessionStore.fetchStaleCandidates(olderThan: 30 * 60, in: db)
+        let ids = candidates.map(\.id)
+        #expect(ids.contains(sid1),  "session with no recent activity must be a stale candidate")
+        #expect(!ids.contains(sid2), "session with recent hook_log must NOT be a stale candidate")
+    }
 }
