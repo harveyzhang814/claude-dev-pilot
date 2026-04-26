@@ -90,6 +90,13 @@ public final class PopoverViewModel {
         actionObservation
             .publisher(in: db, scheduling: .immediate)
             .receive(on: DispatchQueue.main)
+            // Throttle to at most one update per 150ms. Rapid event add/dismiss cycles
+            // (e.g. Claude repeatedly requesting then losing permission) flip actionCount
+            // between 0 and >0, which switches the menubar icon between bell.fill and
+            // bell.badge.fill. The two icons have different widths, causing the MenuBarExtra
+            // popup to reposition horizontally on every flip — the "drift" the user sees.
+            // latest:true ensures we always end up with the current value.
+            .throttle(for: .milliseconds(150), scheduler: DispatchQueue.main, latest: true)
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] events in
@@ -113,6 +120,7 @@ public final class PopoverViewModel {
         recentObservation
             .publisher(in: db, scheduling: .immediate)
             .receive(on: DispatchQueue.main)
+            .throttle(for: .milliseconds(150), scheduler: DispatchQueue.main, latest: true)
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] events in
@@ -136,6 +144,12 @@ public final class PopoverViewModel {
         activeSessionsAndEventsObservation
             .publisher(in: db, scheduling: .immediate)
             .receive(on: DispatchQueue.main)
+            // Throttle: rapid event adds/dismissals (agentStopped → UserPromptSubmit dismiss
+            // cycle) continuously change eventsBySession, making MenubarPopover grow and shrink.
+            // macOS animates the popup window height change each time, producing the
+            // "drift-return" oscillation. Throttle collapses bursts to one update per 150ms
+            // while always ending on the latest value.
+            .throttle(for: .milliseconds(150), scheduler: DispatchQueue.main, latest: true)
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] (sessions, grouped) in

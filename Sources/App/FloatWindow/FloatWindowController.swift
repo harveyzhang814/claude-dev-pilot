@@ -108,10 +108,13 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
     /// Top edge of the panel in screen coordinates. Saved across drags so
     /// compact↔expanded transitions only change height, not position.
     private var pinnedTopY: CGFloat?
-    /// True while positionPanel is driving an animated or programmatic frame
-    /// change. windowDidMove fires on every animation frame — this flag prevents
-    /// intermediate positions from being persisted to UserDefaults.
-    private var isProgrammaticResize = false
+    /// Number of in-flight positionPanel calls (animated or programmatic).
+    /// windowDidMove fires on every animation frame — only persist position
+    /// when this counter is zero (no animation is running).
+    /// Using a counter rather than a Bool correctly handles overlapping animations:
+    /// if animation A finishes while animation B is still running, the counter
+    /// stays positive and windowDidMove is suppressed until B completes too.
+    private var programmaticResizeDepth = 0
 
     // MARK: - Setup
 
@@ -253,19 +256,19 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
         }
 
         let newFrame = NSRect(x: originX, y: topY - height, width: 360, height: height)
-        isProgrammaticResize = true
+        programmaticResizeDepth += 1
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 panel.animator().setFrame(newFrame, display: true)
             } completionHandler: { [weak self] in
-                self?.isProgrammaticResize = false
+                self?.programmaticResizeDepth -= 1
                 completion?()
             }
         } else {
             panel.setFrame(newFrame, display: true)
-            isProgrammaticResize = false
+            programmaticResizeDepth -= 1
             completion?()
         }
     }
@@ -274,7 +277,7 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
 
     nonisolated func windowDidMove(_ notification: Notification) {
         Task { @MainActor [weak self] in
-            guard let self, !self.isProgrammaticResize else { return }
+            guard let self, self.programmaticResizeDepth == 0 else { return }
             // Update pinnedTopY to the new top edge after user drag.
             self.pinnedTopY = self.panel.frame.maxY
             let key = Self.currentDisplayKey()
@@ -388,16 +391,23 @@ final class FloatWindowController: NSObject, NSWindowDelegate {
             } else if displayState.isHoverLocked {
                 transition(to: .hover)
             } else {
-                // Re-size if event count changed
+                // Re-size only if session count changed — status/event changes don't
+                // affect compact height, so skip positionPanel when height is unchanged.
+                // This prevents spurious animated calls that could corrupt pinnedTopY.
                 let h = targetHeight(for: .compact)
-                positionPanel(height: h, animated: true)
+                if abs(h - panel.frame.height) > 1 {
+                    positionPanel(height: h, animated: true)
+                }
             }
         case .hover:
             if viewModel.activeSessions.isEmpty {
                 transition(to: .hidden)
             } else {
+                // Same guard as compact: only reposition when height actually changed.
                 let h = targetHeight(for: .hover)
-                positionPanel(height: h, animated: true)
+                if abs(h - panel.frame.height) > 1 {
+                    positionPanel(height: h, animated: true)
+                }
             }
         case .expanded:
             // Don't auto-collapse while expanded; if everything clears, hide
