@@ -108,10 +108,8 @@ public actor HookStreamCoordinator {
                     if let existing = try DevSession.fetchOne(db, key: sid) {
                         if existing.status == .stale {
                             // Reopen: new hook activity means the session is live again.
-                            // Use raw SQL to avoid DevSession.update(db) re-encoding fields
-                            // that may be stored in legacy ISO 8601 format (e.g. ended_at
-                            // written as "2026-01-01T00:00:00Z" by old markStale calls),
-                            // which GRDB cannot decode as Date and would throw on fetchOne.
+                            // Raw SQL avoids DevSession.update(db) re-encoding every field —
+                            // only status and ended_at need to change.
                             try db.execute(
                                 sql: "UPDATE sessions SET status = ?, ended_at = NULL WHERE id = ?",
                                 arguments: [status.rawValue, sid]
