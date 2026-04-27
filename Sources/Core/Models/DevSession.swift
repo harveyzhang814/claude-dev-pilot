@@ -30,6 +30,21 @@ public struct DevSession: Codable, Identifiable, Sendable, FetchableRecord, Muta
 
     public static let databaseTableName = "sessions"
 
+    // Encode dates as Double (timeIntervalSinceReferenceDate) — SQLite stores them as REAL.
+    public static let databaseDateEncodingStrategy: DatabaseDateEncodingStrategy = .timeIntervalSinceReferenceDate
+
+    // Decode dates from either Double (current format) or ISO 8601 text (legacy format
+    // written by old markStale calls before the Double-storage fix was introduced).
+    // Returning nil for unrecognised values lets GRDB surface a type-mismatch error.
+    public static let databaseDateDecodingStrategy: DatabaseDateDecodingStrategy = .custom { dbValue in
+        switch dbValue.storage {
+        case .double(let t):  return Date(timeIntervalSinceReferenceDate: t)
+        case .int64(let t):   return Date(timeIntervalSinceReferenceDate: Double(t))
+        case .string(let s):  return ISO8601DateFormatter().date(from: s)
+        default:              return nil
+        }
+    }
+
     public enum Columns: String, ColumnExpression {
         case id, project, customName = "custom_name", cwd, tty
         case terminalApp = "terminal_app"
